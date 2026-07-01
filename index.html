@@ -42,7 +42,7 @@ body {
   <form onsubmit="doLogin(event)">
     <div class="form-group">
       <label>邮箱</label>
-      <input type="email" id="email" placeholder="you@company.com" value="demo@qingtian.com" required>
+      <input type="email" id="email" placeholder="you@company.com" value="liu@qingtian.com" required>
     </div>
     <div class="form-group">
       <label>密码</label>
@@ -53,22 +53,23 @@ body {
   <p class="hint">点击登录跳转到仪表盘 →</p>
 </div>
 
+<script src="config.js"></script>
+<script src="api.js"></script>
 <script>
-function doLogin(e) {
+async function doLogin(e) {
   e.preventDefault();
-  // 存储登录状态
-  localStorage.setItem('qingtian_user', JSON.stringify({
-    name: '刘风翼',
-    role: '产品负责人',
-    avatar: 'L',
-    email: document.getElementById('email').value
-  }));
-  // 跳转到仪表盘
-  window.location.href = 'dashboard.html';
+  var email = document.getElementById('email').value;
+  var password = document.getElementById('password').value;
+  try {
+    var user = await doLogin(email, password);
+    window.location.href = 'dashboard.html';
+  } catch (err) {
+    alert('登录失败: ' + err.message);
+  }
 }
 
 // 已登录则直接跳转
-if (localStorage.getItem('qingtian_user')) {
+if (localStorage.getItem('qingtian_token') && localStorage.getItem('qingtian_user')) {
   window.location.href = 'dashboard.html';
 }
 </script>

@@ -233,53 +233,154 @@ a { text-decoration: none; }
   </div>
 </div>
 
-<script src="data.js"></script>
+<script src="config.js"></script>
+<script src="api.js"></script>
 <script>
 // ===== 初始化 =====
-const user = requireLogin();
+var user = requireLogin();
 if (!user) throw new Error('未登录');
 
 document.getElementById('sidebar-avatar').textContent = user.avatar || '?';
 document.getElementById('sidebar-name').textContent = user.name;
 
-const params = new URLSearchParams(window.location.search);
-const projectId = params.get('id') || 'p1';
-const highlightTaskId = params.get('task');
+var params = new URLSearchParams(window.location.search);
+var projectId = params.get('id') || 'p1';
+var highlightTaskId = params.get('task');
 
-let currentModalTaskId = null; // 当前打开的详情任务ID
-let editingTaskId = null;      // 当前编辑的任务ID
+var currentModalTaskId = null;
+var editingTaskId = null;
+var _projectsCache = [];
+var _tasksCache = [];
 
 // ===== 初始化 =====
-function init() {
-  loadData();
-  document.getElementById('proj-badge').textContent = PROJECTS.length;
+async function init() {
+  document.getElementById('proj-badge').textContent = '...';
+  try {
+    var projects = await fetchProjects();
+    _projectsCache = projects;
+    document.getElementById('proj-badge').textContent = projects.length;
 
-  const project = PROJECTS.find(p => p.id === projectId);
-  if (!project) {
-    document.getElementById('proj-title').textContent = '项目未找到';
-    document.getElementById('kanban-board').innerHTML = `
-      <div style="grid-column:1/-1;" class="empty-state">
-        <div class="empty-icon">🔍</div>
-        <h3>项目未找到</h3>
-        <p>请检查链接或返回项目列表</p>
-        <a href="projects.html" class="btn btn-primary" style="margin-top:16px;">← 返回项目列表</a>
-      </div>`;
-    return;
+    var project = projects.find(function (p) { return p.id === projectId; });
+    if (!project) {
+      document.getElementById('proj-title').textContent = '项目未找到';
+      document.getElementById('kanban-board').innerHTML = [
+        '<div style="grid-column:1/-1;" class="empty-state">',
+          '<div class="empty-icon">🔍</div>',
+          '<h3>项目未找到</h3>',
+          '<p>请检查链接或返回项目列表</p>',
+          '<a href="projects.html" class="btn btn-primary" style="margin-top:16px;">← 返回项目列表</a>',
+        '</div>',
+      ].join('');
+      return;
+    }
+
+    document.getElementById('proj-title').textContent = project.name + ' · 任务看板';
+    await renderKanban();
+  } catch (err) {
+    showToast(err.message, 'error');
   }
-
-  document.getElementById('proj-title').textContent = project.name + ' · 任务看板';
-  populateAssigneeFilter(projectId);
-  renderKanban();
 }
 
-// ===== 负责人过滤下拉 =====
-function populateAssigneeFilter(pid) {
-  const assignees = [...new Set(TASKS.filter(t => t.pid === pid).map(t => t.assignee))];
-  const sel = document.getElementById('filter-assignee');
-  const currentVal = sel.value;
+// ===== 渲染看板 =====
+async function renderKanban() {
+  try {
+    var tasks = await fetchProjectTasks(projectId);
+    _tasksCache = tasks;
+
+    var keyword = document.getElementById('search-keyword').value;
+    var priorityFilter = document.getElementById('filter-priority').value;
+    var assigneeFilter = document.getElementById('filter-assignee').value;
+
+    var statuses = [
+      { key: 'todo', label: '📋 待办' },
+      { key: 'in_progress', label: '🔄 进行中' },
+      { key: 'done', label: '✅ 已完成' },
+    ];
+
+    var priorityOrder = { high: 0, medium: 1, low: 2 };
+
+    // 负责人过滤下拉
+    populateAssigneeFilter(tasks);
+
+    var boardHtml = '';
+    statuses.forEach(function (s) {
+      var filtered = tasks.filter(function (t) { return t.status === s.key; });
+
+      if (keyword) {
+        var kw = keyword.toLowerCase();
+        filtered = filtered.filter(function (t) {
+          return t.title.toLowerCase().indexOf(kw) !== -1 ||
+            (t.description && t.description.toLowerCase().indexOf(kw) !== -1);
+        });
+      }
+      if (priorityFilter) {
+        filtered = filtered.filter(function (t) { return t.priority === priorityFilter; });
+      }
+      if (assigneeFilter) {
+        filtered = filtered.filter(function (t) { return (t.assignee_id || '') === assigneeFilter || (t.assignee && t.assignee.name === assigneeFilter); });
+      }
+
+      filtered.sort(function (a, b) {
+        return (priorityOrder[a.priority] || 99) - (priorityOrder[b.priority] || 99);
+      });
+
+      boardHtml += '<div class="kanban-col">' +
+        '<h4>' + s.label + ' <span class="kanban-count">' + filtered.length + '</span></h4>';
+
+      if (filtered.length === 0) {
+        boardHtml += '<div class="empty-state" style="padding:20px;">' +
+          '<div class="empty-icon" style="font-size:32px;">📭</div>' +
+          '<p style="font-size:13px;">暂无任务</p>' +
+        '</div>';
+      } else {
+        filtered.forEach(function (t) {
+          var priorityClass = 'priority-' + t.priority;
+          var isHighlighted = t.id === highlightTaskId;
+          boardHtml += '<div class="kanban-card' + (isHighlighted ? ' highlight' : '') + '">' +
+            '<div class="kc-actions">' +
+              '<button class="cycle-btn" title="切换状态" onclick="event.stopPropagation();handleCycleAndRefresh(\'' + t.id + '\')">🔄</button>' +
+              '<button class="edit-btn" title="编辑" onclick="event.stopPropagation();handleEditTask(\'' + t.id + '\')">✏️</button>' +
+              '<button class="del-btn" title="删除" onclick="event.stopPropagation();handleDeleteTask(\'' + t.id + '\')">🗑️</button>' +
+            '</div>' +
+            '<div onclick="openTaskDetail(\'' + t.id + '\')">' +
+              '<div class="kc-title">' + t.title + '</div>' +
+              '<div class="kc-tags">' +
+                '<span class="priority-tag ' + priorityClass + '">' + priorityLabel(t.priority) + '优先级</span>' +
+                (isHighlighted ? '<span style="font-size:10px;background:var(--primary-light);color:var(--primary);padding:2px 6px;border-radius:4px;">📍 来自仪表盘</span>' : '') +
+              '</div>' +
+              '<div class="kc-footer">' +
+                '<span>👤 ' + getAssigneeDisplay(t) + '</span>' +
+                '<span>📅 ' + (t.due_date || '—') + '</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        });
+      }
+      boardHtml += '</div>';
+    });
+
+    document.getElementById('kanban-board').innerHTML = boardHtml;
+
+    if (highlightTaskId) {
+      openTaskDetail(highlightTaskId);
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function populateAssigneeFilter(tasks) {
+  var assigneeSet = {};
+  tasks.forEach(function (t) {
+    var name = getAssigneeDisplay(t);
+    if (name && name !== '?') assigneeSet[name] = true;
+  });
+  var assignees = Object.keys(assigneeSet);
+  var sel = document.getElementById('filter-assignee');
+  var currentVal = sel.value;
   sel.innerHTML = '<option value="">全部负责人</option>';
-  assignees.forEach(a => {
-    sel.innerHTML += `<option value="${a}">${a}</option>`;
+  assignees.forEach(function (a) {
+    sel.innerHTML += '<option value="' + a + '">' + a + '</option>';
   });
   sel.value = currentVal;
 }
@@ -291,87 +392,14 @@ function resetFilters() {
   renderKanban();
 }
 
-// ===== 渲染看板 =====
-function renderKanban() {
-  loadData();
-  const keyword = document.getElementById('search-keyword').value;
-  const priorityFilter = document.getElementById('filter-priority').value;
-  const assigneeFilter = document.getElementById('filter-assignee').value;
-
-  const statuses = [
-    { key: 'todo', label: '📋 待办' },
-    { key: 'in_progress', label: '🔄 进行中' },
-    { key: 'done', label: '✅ 已完成' },
-  ];
-
-  const priorityOrder = { high: 0, medium: 1, low: 2 };
-  let boardHtml = '';
-
-  statuses.forEach(s => {
-    let tasks = TASKS.filter(t => t.pid === projectId && t.status === s.key);
-
-    // 关键词过滤
-    if (keyword) {
-      const kw = keyword.toLowerCase();
-      tasks = tasks.filter(t => t.title.toLowerCase().includes(kw) || (t.desc && t.desc.toLowerCase().includes(kw)));
-    }
-    // 优先级过滤
-    if (priorityFilter) {
-      tasks = tasks.filter(t => t.priority === priorityFilter);
-    }
-    // 负责人过滤
-    if (assigneeFilter) {
-      tasks = tasks.filter(t => t.assignee === assigneeFilter);
-    }
-
-    tasks.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
-
-    boardHtml += `<div class="kanban-col">
-      <h4>${s.label} <span class="kanban-count">${tasks.length}</span></h4>`;
-
-    if (tasks.length === 0) {
-      boardHtml += `<div class="empty-state" style="padding:20px;">
-        <div class="empty-icon" style="font-size:32px;">📭</div>
-        <p style="font-size:13px;">暂无任务</p>
-      </div>`;
-    } else {
-      tasks.forEach(t => {
-        const priorityClass = 'priority-' + t.priority;
-        const isHighlighted = t.id === highlightTaskId;
-        boardHtml += `<div class="kanban-card${isHighlighted ? ' highlight' : ''}">
-          <div class="kc-actions">
-            <button class="cycle-btn" title="切换状态" onclick="event.stopPropagation();handleCycleAndRefresh('${t.id}')">🔄</button>
-            <button class="edit-btn" title="编辑" onclick="event.stopPropagation();handleEditTask('${t.id}')">✏️</button>
-            <button class="del-btn" title="删除" onclick="event.stopPropagation();handleDeleteTask('${t.id}')">🗑️</button>
-          </div>
-          <div onclick="openTaskDetail('${t.id}')">
-            <div class="kc-title">${t.title}</div>
-            <div class="kc-tags">
-              <span class="priority-tag ${priorityClass}">${priorityLabel(t.priority)}优先级</span>
-              ${isHighlighted ? '<span style="font-size:10px;background:var(--primary-light);color:var(--primary);padding:2px 6px;border-radius:4px;">📍 来自仪表盘</span>' : ''}
-            </div>
-            <div class="kc-footer">
-              <span>👤 ${t.assignee}</span>
-              <span>📅 ${t.due || '—'}</span>
-            </div>
-          </div>
-        </div>`;
-      });
-    }
-    boardHtml += `</div>`;
-  });
-
-  document.getElementById('kanban-board').innerHTML = boardHtml;
-
-  if (highlightTaskId) {
-    openTaskDetail(highlightTaskId);
-  }
-}
-
 // ===== 卡片操作 =====
-function handleCycleAndRefresh(taskId) {
-  cycleStatus(taskId);
-  renderKanban();
+async function handleCycleAndRefresh(taskId) {
+  try {
+    await cycleTaskStatus(taskId);
+    renderKanban();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 function handleEditTask(taskId) {
@@ -379,72 +407,87 @@ function handleEditTask(taskId) {
 }
 
 function handleDeleteTask(taskId) {
-  const task = TASKS.find(t => t.id === taskId);
+  var task = _tasksCache.find(function (t) { return t.id === taskId; });
   if (!task) return;
-  showConfirm('确定要删除任务「' + task.title + '」吗？', function() {
-    deleteTask(taskId);
-    renderKanban();
-    if (currentModalTaskId === taskId) closeModal();
+  showConfirm('确定要删除任务「' + task.title + '」吗？', async function () {
+    try {
+      await deleteTaskById(taskId);
+      renderKanban();
+      if (currentModalTaskId === taskId) closeModal();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
   });
 }
 
 // ===== 任务详情弹窗 =====
-function openTaskDetail(taskId) {
-  loadData();
-  const task = TASKS.find(t => t.id === taskId);
-  if (!task) return;
-  currentModalTaskId = taskId;
+async function openTaskDetail(taskId) {
+  try {
+    var task = await fetchTask(taskId);
+    var proj = _projectsCache.find(function (p) { return p.id === task.pid; });
+    var comments = await fetchTaskComments(taskId);
+    currentModalTaskId = taskId;
 
-  const proj = PROJECTS.find(p => p.id === task.pid);
-  const taskComments = COMMENTS.filter(c => c.taskId === taskId);
-  const statusMap = { todo: '📋 待办', in_progress: '🔄 进行中', done: '✅ 已完成' };
+    var statusMap = { todo: '📋 待办', in_progress: '🔄 进行中', done: '✅ 已完成' };
 
-  document.getElementById('modal-title').textContent = task.title;
-  document.getElementById('modal-cycle-btn').textContent = '🔄 ' + (task.status === 'todo' ? '开始' : task.status === 'in_progress' ? '完成' : '重开');
+    document.getElementById('modal-title').textContent = task.title;
+    document.getElementById('modal-cycle-btn').textContent = '🔄 ' + (task.status === 'todo' ? '开始' : task.status === 'in_progress' ? '完成' : '重开');
 
-  let html = `
-    <div class="detail-row">
-      <div class="detail-label">所属项目</div>
-      <div class="detail-value"><a href="project-detail.html?id=${task.pid}" style="color:var(--primary);">${proj ? proj.name : ''}</a></div>
-    </div>
-    <div class="detail-row" style="display:flex;gap:24px;flex-wrap:wrap;">
-      <div><div class="detail-label">状态</div><div class="detail-value">${statusMap[task.status]}</div></div>
-      <div><div class="detail-label">优先级</div><div class="detail-value"><span class="priority-tag priority-${task.priority}">${priorityLabel(task.priority)}优先级</span></div></div>
-      <div><div class="detail-label">负责人</div><div class="detail-value">👤 ${task.assignee}</div></div>
-      <div><div class="detail-label">截止日期</div><div class="detail-value">📅 ${task.due || '未设置'}</div></div>
-    </div>
+    var html = [
+      '<div class="detail-row">',
+        '<div class="detail-label">所属项目</div>',
+        '<div class="detail-value"><a href="project-detail.html?id=' + task.pid + '" style="color:var(--primary);">' + (proj ? proj.name : '') + '</a></div>',
+      '</div>',
+      '<div class="detail-row" style="display:flex;gap:24px;flex-wrap:wrap;">',
+        '<div><div class="detail-label">状态</div><div class="detail-value">' + statusMap[task.status] + '</div></div>',
+        '<div><div class="detail-label">优先级</div><div class="detail-value"><span class="priority-tag priority-' + task.priority + '">' + priorityLabel(task.priority) + '优先级</span></div></div>',
+        '<div><div class="detail-label">负责人</div><div class="detail-value">👤 ' + getAssigneeDisplay(task) + '</div></div>',
+        '<div><div class="detail-label">截止日期</div><div class="detail-value">📅 ' + (task.due_date || '未设置') + '</div></div>',
+      '</div>',
+      '<div class="detail-row">',
+        '<div class="detail-label">描述</div>',
+        '<textarea rows="3" readonly style="background:var(--gray-50);color:var(--gray-600);">' + (task.description || '暂无描述') + '</textarea>',
+      '</div>',
+      '<div class="detail-row">',
+        '<div class="detail-label">评论 (' + comments.length + ')</div>',
+    ].join('');
 
-    <div class="detail-row">
-      <div class="detail-label">描述</div>
-      <textarea rows="3" readonly style="background:var(--gray-50);color:var(--gray-600);">${task.desc || '暂无描述'}</textarea>
-    </div>
+    if (comments.length === 0) {
+      html += '<p style="color:var(--gray-400);font-size:13px;margin-bottom:12px;">暂无评论</p>';
+    } else {
+      comments.forEach(function (c) {
+        var authorName = getCommentAuthorDisplay(c);
+        var canDelete = c.author && (c.author.name === user.avatar || c.author.name === user.name);
+        html += '<div class="comment">' +
+          '<div class="cmt-content">' +
+            '<div><span class="cmt-author">👤 ' + authorName + '</span><span class="cmt-time">' + formatTime(c.created_at) + '</span></div>' +
+            '<div class="cmt-text">' + c.text + '</div>' +
+          '</div>' +
+          (canDelete ? '<button class="cmt-del" onclick="handleDeleteComment(\'' + c.id + '\')">✕</button>' : '') +
+        '</div>';
+      });
+    }
 
-    <div class="detail-row">
-      <div class="detail-label">评论 (${taskComments.length})</div>`;
+    html += '</div>' +
+      '<div class="detail-row">' +
+        '<textarea rows="2" id="comment-input" placeholder="添加评论..." style="margin-bottom:8px;"></textarea>' +
+        '<button class="btn btn-primary btn-sm" onclick="handleAddComment(\'' + taskId + '\')">发送评论</button>' +
+      '</div>';
 
-  if (taskComments.length === 0) {
-    html += `<p style="color:var(--gray-400);font-size:13px;margin-bottom:12px;">暂无评论</p>`;
-  } else {
-    taskComments.forEach(c => {
-      const canDelete = c.author === user.avatar || c.author === user.name;
-      html += `<div class="comment">
-        <div class="cmt-content">
-          <div><span class="cmt-author">👤 ${c.author}</span><span class="cmt-time">${c.time}</span></div>
-          <div class="cmt-text">${c.text}</div>
-        </div>
-        ${canDelete ? `<button class="cmt-del" onclick="handleDeleteComment('${c.id}')">✕</button>` : ''}
-      </div>`;
-    });
+    document.getElementById('modal-body').innerHTML = html;
+    document.getElementById('task-modal').classList.add('active');
+  } catch (err) {
+    showToast(err.message, 'error');
   }
+}
 
-  html += `</div>
-    <div class="detail-row">
-      <textarea rows="2" id="comment-input" placeholder="添加评论..." style="margin-bottom:8px;"></textarea>
-      <button class="btn btn-primary btn-sm" onclick="handleAddComment('${taskId}')">发送评论</button>
-    </div>`;
-
-  document.getElementById('modal-body').innerHTML = html;
-  document.getElementById('task-modal').classList.add('active');
+function formatTime(dateStr) {
+  if (!dateStr) return '';
+  var d = new Date(dateStr);
+  return (d.getMonth() + 1).toString().padStart(2, '0') + '-' +
+    d.getDate().toString().padStart(2, '0') + ' ' +
+    d.getHours().toString().padStart(2, '0') + ':' +
+    d.getMinutes().toString().padStart(2, '0');
 }
 
 function closeModal() {
@@ -453,23 +496,36 @@ function closeModal() {
 }
 
 // ===== 模态内操作 =====
-function modalCycleStatus() {
+async function modalCycleStatus() {
   if (!currentModalTaskId) return;
-  cycleStatus(currentModalTaskId);
-  openTaskDetail(currentModalTaskId);
-  renderKanban();
+  try {
+    await cycleTaskStatus(currentModalTaskId);
+    openTaskDetail(currentModalTaskId);
+    renderKanban();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
-function handleAddComment(taskId) {
-  const text = document.getElementById('comment-input').value;
-  addComment(taskId, user.avatar || user.name, text);
-  openTaskDetail(taskId); // 刷新评论
+async function handleAddComment(taskId) {
+  var text = document.getElementById('comment-input').value;
+  if (!text.trim()) { showToast('请输入评论内容', 'warning'); return; }
+  try {
+    await addCommentToTask(taskId, text);
+    openTaskDetail(taskId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 function handleDeleteComment(commentId) {
-  showConfirm('确定要删除这条评论吗？', function() {
-    deleteComment(commentId);
-    if (currentModalTaskId) openTaskDetail(currentModalTaskId);
+  showConfirm('确定要删除这条评论吗？', async function () {
+    try {
+      await deleteCommentById(commentId);
+      if (currentModalTaskId) openTaskDetail(currentModalTaskId);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
   });
 }
 
@@ -484,22 +540,22 @@ function openCreateTaskModal() {
   document.getElementById('task-due-input').value = '';
   document.getElementById('task-desc-input').value = '';
   document.getElementById('task-form-modal').classList.add('active');
-  setTimeout(() => document.getElementById('task-title-input').focus(), 100);
+  setTimeout(function () { document.getElementById('task-title-input').focus(); }, 100);
 }
 
 function openEditTaskModal(taskId) {
-  const task = TASKS.find(t => t.id === (taskId || currentModalTaskId));
+  var task = _tasksCache.find(function (t) { return t.id === (taskId || currentModalTaskId); });
   if (!task) return;
   editingTaskId = task.id;
   document.getElementById('task-form-title').textContent = '编辑任务';
   document.getElementById('task-form-save-btn').textContent = '保存修改';
   document.getElementById('task-title-input').value = task.title;
   document.getElementById('task-priority-input').value = task.priority;
-  document.getElementById('task-assignee-input').value = task.assignee;
-  document.getElementById('task-due-input').value = task.due || '';
-  document.getElementById('task-desc-input').value = task.desc || '';
+  document.getElementById('task-assignee-input').value = task.assignee_id || '';
+  document.getElementById('task-due-input').value = task.due_date || '';
+  document.getElementById('task-desc-input').value = task.description || '';
   document.getElementById('task-form-modal').classList.add('active');
-  closeModal();
+  if (currentModalTaskId) closeModal();
 }
 
 function closeTaskFormModal() {
@@ -507,30 +563,39 @@ function closeTaskFormModal() {
   editingTaskId = null;
 }
 
-function saveTaskForm() {
-  const title = document.getElementById('task-title-input').value.trim();
+async function saveTaskForm() {
+  var title = document.getElementById('task-title-input').value.trim();
   if (!title) { showToast('请输入任务标题', 'warning'); return; }
 
-  const priority = document.getElementById('task-priority-input').value;
-  const assignee = document.getElementById('task-assignee-input').value.trim() || '?';
-  const due = document.getElementById('task-due-input').value.trim();
-  const desc = document.getElementById('task-desc-input').value.trim();
+  var priority = document.getElementById('task-priority-input').value;
+  var assignee = document.getElementById('task-assignee-input').value.trim() || null;
+  var due = document.getElementById('task-due-input').value.trim();
+  var desc = document.getElementById('task-desc-input').value.trim();
 
-  if (editingTaskId) {
-    updateTask(editingTaskId, { title, priority, assignee, due, desc });
-  } else {
-    createTask(projectId, title, priority, assignee, due, desc);
+  try {
+    if (editingTaskId) {
+      await updateTaskById(editingTaskId, {
+        title: title,
+        priority: priority,
+        assignee: assignee,
+        due: due,
+        desc: desc,
+      });
+    } else {
+      await createNewTask(projectId, title, priority, assignee, due, desc);
+    }
+    closeTaskFormModal();
+    renderKanban();
+  } catch (err) {
+    showToast(err.message, 'error');
   }
-
-  closeTaskFormModal();
-  renderKanban();
 }
 
 // ===== 遮罩点击关闭 =====
-document.getElementById('task-modal').addEventListener('click', function(e) {
+document.getElementById('task-modal').addEventListener('click', function (e) {
   if (e.target === this) closeModal();
 });
-document.getElementById('task-form-modal').addEventListener('click', function(e) {
+document.getElementById('task-form-modal').addEventListener('click', function (e) {
   if (e.target === this) closeTaskFormModal();
 });
 

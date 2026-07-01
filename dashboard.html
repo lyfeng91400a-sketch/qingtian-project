@@ -160,10 +160,11 @@ a { color: var(--primary); text-decoration: none; }
   </div>
 </main>
 
-<script src="data.js"></script>
+<script src="config.js"></script>
+<script src="api.js"></script>
 <script>
 // ===== 初始化 =====
-const user = requireLogin();
+var user = requireLogin();
 if (!user) throw new Error('未登录');
 
 document.getElementById('sidebar-avatar').textContent = user.avatar || '?';
@@ -171,51 +172,42 @@ document.getElementById('sidebar-name').textContent = user.name;
 document.getElementById('greeting').textContent = '👋 欢迎回来，' + user.name;
 document.getElementById('today').textContent = getTodayStr();
 
-let showAllTasks = false;
+var showAllTasks = false;
 
 // ===== 渲染所有 =====
-function renderDashboard() {
-  loadData();
+async function renderDashboard() {
+  var data = await loadDashboardData();
+  var projects = data.projects;
+  var stats = data.stats;
+  var myTasks = data.myTasks;
+  var recentProjects = data.recentProjects;
 
   // 侧边栏项目数
-  document.getElementById('proj-badge').textContent = PROJECTS.length;
+  document.getElementById('proj-badge').textContent = projects.length;
 
   // 统计卡片
-  const totalTasks = TASKS.length;
-  const doneCount = TASKS.filter(t => t.status === 'done').length;
-  const inProgressCount = TASKS.filter(t => t.status === 'in_progress').length;
-  const todoCount = TASKS.filter(t => t.status === 'todo').length;
+  document.getElementById('stat-projects').textContent = stats.active_projects || projects.length;
+  document.getElementById('stat-done').textContent = stats.done_tasks;
+  document.getElementById('stat-progress').textContent = stats.in_progress_tasks;
+  document.getElementById('stat-todo').textContent = stats.todo_tasks;
 
-  document.getElementById('stat-projects').textContent = PROJECTS.length;
-  document.getElementById('stat-done').textContent = doneCount;
-  document.getElementById('stat-progress').textContent = inProgressCount;
-  document.getElementById('stat-todo').textContent = todoCount;
+  document.getElementById('stat-projects-change').textContent = projects.length + ' 个项目中';
+  document.getElementById('stat-done-change').textContent = '完成率 ' + (stats.total_tasks ? Math.round(stats.done_tasks/stats.total_tasks*100) : 0) + '%';
+  document.getElementById('stat-progress-change').textContent = stats.in_progress_tasks + ' 个进行中';
+  document.getElementById('stat-todo-change').textContent = stats.todo_tasks + ' 个待处理';
 
-  // 变化提示
-  document.getElementById('stat-projects-change').textContent = PROJECTS.length + ' 个项目中';
-  document.getElementById('stat-done-change').textContent = '完成率 ' + (totalTasks ? Math.round(doneCount/totalTasks*100) : 0) + '%';
-  document.getElementById('stat-progress-change').textContent = inProgressCount + ' 个进行中';
-  document.getElementById('stat-todo-change').textContent = todoCount + ' 个待处理';
-
-  // 紧急任务（本周内截止且未完成）
-  const urgentCount = TASKS.filter(t => t.status !== 'done' && t.due).length;
+  // 紧急任务
+  var urgentCount = myTasks.length;
   document.getElementById('urgent-count').textContent = urgentCount;
 
-  renderMyTasks();
-  renderRecentProjects();
+  renderMyTasks(myTasks, projects);
+  renderRecentProjects(recentProjects);
 }
 
 // ===== 我的待办 =====
-function renderMyTasks() {
-  const myName = user.name;
-  // 获取当前用户相关的任务（负责人包含姓或名，或直接匹配）
-  const myTasks = TASKS.filter(t =>
-    t.status !== 'done' &&
-    (t.assignee === user.avatar || t.assignee === user.name.charAt(0))
-  );
-
-  const displayTasks = showAllTasks ? myTasks : myTasks.slice(0, 5);
-  const taskCount = myTasks.length;
+function renderMyTasks(tasks, projects) {
+  var displayTasks = showAllTasks ? tasks : tasks.slice(0, 5);
+  var taskCount = tasks.length;
 
   document.getElementById('toggle-tasks-btn').textContent =
     showAllTasks ? '收起' : '查看全部' + (taskCount > 5 ? ' (' + taskCount + ')' : '');
@@ -226,57 +218,60 @@ function renderMyTasks() {
     return;
   }
 
-  let html = '';
-  displayTasks.forEach(t => {
-    const proj = PROJECTS.find(p => p.id === t.pid);
-    const pClass = 'priority-' + t.priority;
-    const checkSymbol = t.status === 'done' ? '✓' : t.status === 'in_progress' ? '◉' : '';
-    html += `<div class="task-row">
-      <div class="task-check ${t.status}" onclick="event.stopPropagation();handleCycleStatus('${t.id}')">${checkSymbol}</div>
-      <div class="task-info" onclick="openTaskDetail('${t.id}')">
-        <div class="task-title">${t.title}</div>
-        <div class="task-meta">${proj ? proj.name : ''} · 截止 ${t.due || '未设置'} · ${t.assignee}</div>
-      </div>
-      <span class="priority-tag ${pClass}">${priorityLabel(t.priority)}</span>
-    </div>`;
+  var html = '';
+  displayTasks.forEach(function (t) {
+    var proj = projects.find(function (p) { return p.id === t.pid; });
+    var pClass = 'priority-' + t.priority;
+    var checkSymbol = t.status === 'done' ? '✓' : t.status === 'in_progress' ? '◉' : '';
+    html += '<div class="task-row">' +
+      '<div class="task-check ' + t.status + '" onclick="event.stopPropagation();handleCycleStatus(\'' + t.id + '\')">' + checkSymbol + '</div>' +
+      '<div class="task-info" onclick="openTaskDetail(\'' + t.id + '\', \'' + t.pid + '\')">' +
+        '<div class="task-title">' + t.title + '</div>' +
+        '<div class="task-meta">' + (proj ? proj.name : '') + ' · 截止 ' + (t.due_date || '未设置') + ' · ' + getAssigneeDisplay(t) + '</div>' +
+      '</div>' +
+      '<span class="priority-tag ' + pClass + '">' + priorityLabel(t.priority) + '</span>' +
+    '</div>';
   });
   document.getElementById('my-tasks').innerHTML = html;
 }
 
 function toggleAllTasks() {
   showAllTasks = !showAllTasks;
-  renderMyTasks();
-}
-
-// ===== 状态循环 =====
-function handleCycleStatus(taskId) {
-  cycleStatus(taskId);
   renderDashboard();
 }
 
+// ===== 状态循环 =====
+async function handleCycleStatus(taskId) {
+  try {
+    await cycleTaskStatus(taskId);
+    renderDashboard();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
 // ===== 最近项目 =====
-function renderRecentProjects() {
-  let html = '';
-  PROJECTS.slice(0, 3).forEach(p => {
-    const total = p.tasks.done + p.tasks.in_progress + p.tasks.todo;
-    html += `<a href="project-detail.html?id=${p.id}" class="task-row">
-      <div style="width:32px;height:32px;border-radius:6px;background:${p.color}15;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">📁</div>
-      <div class="task-info">
-        <div class="task-title">${p.name}</div>
-        <div class="task-meta">${total} 个任务 · ${p.progress}% 完成</div>
-      </div>
-      <div style="width:60px;"><div class="progress-bar"><div class="progress-fill" style="width:${p.progress}%"></div></div></div>
-    </a>`;
+function renderRecentProjects(projects) {
+  var html = '';
+  (projects || []).forEach(function (p) {
+    var total = p.task_count || 0;
+    var progress = p.progress || 0;
+    html += '<a href="project-detail.html?id=' + p.id + '" class="task-row">' +
+      '<div style="width:32px;height:32px;border-radius:6px;background:' + p.color + '15;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">📁</div>' +
+      '<div class="task-info">' +
+        '<div class="task-title">' + p.name + '</div>' +
+        '<div class="task-meta">' + total + ' 个任务 · ' + progress + '% 完成</div>' +
+      '</div>' +
+      '<div style="width:60px;"><div class="progress-bar"><div class="progress-fill" style="width:' + progress + '%"></div></div></div>' +
+    '</a>';
   });
   if (!html) html = '<div class="empty-state">暂无项目</div>';
   document.getElementById('recent-projects').innerHTML = html;
 }
 
-// ===== 任务详情弹窗 =====
-function openTaskDetail(taskId) {
-  const task = TASKS.find(t => t.id === taskId);
-  if (!task) return;
-  window.location.href = 'project-detail.html?id=' + task.pid + '&task=' + task.id;
+// ===== 任务详情跳转 =====
+function openTaskDetail(taskId, pid) {
+  window.location.href = 'project-detail.html?id=' + pid + '&task=' + taskId;
 }
 
 // ===== 渲染 =====
