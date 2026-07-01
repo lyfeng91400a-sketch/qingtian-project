@@ -211,11 +211,11 @@ input, textarea, select { font-family: inherit; }
     <p class="subtitle">轻量级项目看板，让团队工作更清爽</p>
     <div class="form-group">
       <label>邮箱</label>
-      <input type="email" placeholder="you@company.com" value="demo@qingtian.com">
+      <input type="email" id="login-email" placeholder="you@company.com" value="demo@qingtian.com">
     </div>
     <div class="form-group">
       <label>密码</label>
-      <input type="password" placeholder="••••••••" value="123456">
+      <input type="password" id="login-password" placeholder="••••••••" value="123456">
     </div>
     <button class="btn btn-primary" onclick="login()">登 录</button>
     <p style="text-align:center; margin-top:16px; font-size:13px; color:var(--gray-400);">点击登录进入晴天看板</p>
@@ -258,13 +258,26 @@ input, textarea, select { font-family: inherit; }
       <div class="stats-grid" id="stats-grid"></div>
       <div class="dashboard-grid">
         <div class="card">
-          <div class="card-header"><h3>📌 我的待办</h3><button class="btn btn-sm btn-ghost" onclick="navTo('projects')">查看全部 →</button></div>
+          <div class="card-header"><h3>📌 我的待办</h3><button class="btn btn-sm btn-ghost" onclick="showAllTasks()">查看全部 →</button></div>
           <div class="card-body" id="my-tasks"></div>
         </div>
         <div class="card">
           <div class="card-header"><h3>🚀 最近项目</h3><button class="btn btn-sm btn-ghost" onclick="navTo('projects')">查看全部 →</button></div>
           <div class="card-body" id="recent-projects"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ALL TASKS VIEW (我的全部待办) -->
+    <div id="view-all-tasks" class="view">
+      <div class="page-header">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+          <div><h2>📌 我的全部待办</h2><p>所有分配给 L 的任务（含已完成）</p></div>
+          <button class="btn btn-sm btn-ghost" onclick="navTo('dashboard')">← 返回仪表盘</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body" id="all-tasks-list"></div>
       </div>
     </div>
 
@@ -544,7 +557,11 @@ let currentProjectId = null;
 function showView(viewId) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   const el = document.getElementById('view-' + viewId);
-  if (el) el.classList.add('active');
+  if (el) {
+    el.classList.add('active');
+  } else {
+    console.warn('[showView] 未找到视图元素: view-' + viewId);
+  }
   currentView = viewId;
 }
 
@@ -552,6 +569,7 @@ function navTo(view, projectId) {
   document.querySelectorAll('#nav-global .nav-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('#nav-projects .nav-item').forEach(n => n.classList.remove('active'));
 
+  // 始终清除 selector，确保按 view 重绘
   if (view === 'dashboard') {
     const globalNav = document.querySelectorAll('#nav-global .nav-item');
     if (globalNav[0]) globalNav[0].classList.add('active');
@@ -564,7 +582,8 @@ function navTo(view, projectId) {
     showView('projects');
     renderProjects();
     currentProjectId = null;
-  } else if (view === 'kanban' && projectId) {
+  } else if (view === 'kanban') {
+    if (!projectId) { navTo('projects'); return; }
     currentProjectId = projectId;
     const navItem = document.querySelector('#nav-projects .nav-item[data-pid="' + projectId + '"]');
     if (navItem) navItem.classList.add('active');
@@ -577,6 +596,17 @@ function navTo(view, projectId) {
 // LOGIN
 // ============================================================
 function login() {
+  var email = document.getElementById('login-email').value.trim();
+  var password = document.getElementById('login-password').value.trim();
+  if (!email || !password) {
+    toast('请输入邮箱和密码', 'error');
+    return;
+  }
+  // 简单邮箱格式校验
+  if (email.indexOf('@') === -1) {
+    toast('请输入有效的邮箱地址', 'error');
+    return;
+  }
   document.getElementById('page-login').classList.remove('active');
   document.getElementById('page-app').classList.add('active');
   loadData();
@@ -632,8 +662,8 @@ function renderDashboard() {
   });
   document.getElementById('stats-grid').innerHTML = statsHtml;
 
-  // My pending tasks (assigned to L, not done)
-  var myTasks = DATA.tasks.filter(function(t) { return t.assignee === 'L' && t.status !== 'done'; }).slice(0, 6);
+  // My pending tasks (assigned to L, 含已完成，允许点击恢复)
+  var myTasks = DATA.tasks.filter(function(t) { return t.assignee === 'L'; }).slice(0, 6);
   var mtHtml = '';
   myTasks.forEach(function(t) {
     var proj = getProject(t.pid);
@@ -670,6 +700,33 @@ function renderDashboard() {
 function currentUserTasks() {
   if (!DATA) return [];
   return DATA.tasks.filter(function(t) { return t.assignee === 'L' && t.status !== 'done'; });
+}
+
+// ============================================================
+// ALL TASKS VIEW
+// ============================================================
+function showAllTasks() {
+  if (!DATA) return;
+  // 从导航栏移除所有 active 状态（保持视图干净）
+  document.querySelectorAll('#nav-global .nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('#nav-projects .nav-item').forEach(n => n.classList.remove('active'));
+
+  var tasks = DATA.tasks.filter(function(t) { return t.assignee === 'L'; });
+  var html = '';
+  tasks.forEach(function(t) {
+    var proj = getProject(t.pid);
+    var statusLabels = { todo: '待办', in_progress: '进行中', done: '已完成' };
+    html += '<div class="task-row" onclick="openTaskDetail(\'' + t.id + '\')" style="cursor:pointer;">'
+      + '<div class="task-check ' + (t.status === 'done' ? 'done' : '') + '" onclick="event.stopPropagation();cycleStatus(\'' + t.id + '\')">' + (t.status === 'done' ? '✓' : '') + '</div>'
+      + '<div class="task-info">'
+      + '<div class="task-title">' + t.title + '</div>'
+      + '<div class="task-meta">' + (proj ? proj.name : '未知项目') + ' · ' + statusLabels[t.status] + ' · 截止 ' + t.due + '</div>'
+      + '</div>'
+      + '<span class="priority-tag priority-' + t.priority + '">' + (t.priority === 'high' ? '高' : t.priority === 'medium' ? '中' : '低') + '</span>'
+      + '</div>';
+  });
+  document.getElementById('all-tasks-list').innerHTML = html || '<div class="empty-state"><div class="empty-icon">📋</div><p>暂无待办 🎉</p></div>';
+  showView('all-tasks');
 }
 
 // ============================================================
@@ -887,6 +944,10 @@ function openTaskDetail(taskId) {
     + '<div class="detail-label">所属项目</div>'
     + '<div class="detail-value">' + (proj ? proj.name : '未知') + '</div>'
     + '</div>'
+    + '<div class="form-group" style="margin-bottom:16px;">'
+    + '<label>任务标题 *</label>'
+    + '<input type="text" id="detail-edit-title" value="' + task.title.replace(/"/g, '&quot;') + '">'
+    + '</div>'
     + '<div class="form-row" style="margin-bottom:16px;">'
     + '<div class="form-group">'
     + '<label>状态</label>'
@@ -945,12 +1006,15 @@ function saveTaskEdit() {
   var task = DATA.tasks.find(function(t) { return t.id === _detailTaskId; });
   if (!task) return;
 
+  var title = document.getElementById('detail-edit-title').value.trim();
+  if (!title) { toast('请输入任务标题', 'error'); return; }
   var status = document.getElementById('detail-edit-status').value;
   var priority = document.getElementById('detail-edit-priority').value;
   var assignee = document.getElementById('detail-edit-assignee').value.trim();
   var due = document.getElementById('detail-edit-due').value.trim();
   var desc = document.getElementById('detail-edit-desc').value.trim();
 
+  task.title = title;
   task.status = status;
   task.priority = priority;
   task.assignee = assignee || task.assignee;
