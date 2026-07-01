@@ -353,7 +353,7 @@ function searchProjects(keyword) {
 
 function requireLogin() {
   if (!localStorage.getItem('qingtian_user')) {
-    window.location.href = 'login.html';
+    window.location.href = 'index.html';
     return null;
   }
   return JSON.parse(localStorage.getItem('qingtian_user'));
@@ -361,7 +361,7 @@ function requireLogin() {
 
 function logout() {
   localStorage.removeItem('qingtian_user');
-  window.location.href = 'login.html';
+  window.location.href = 'index.html';
 }
 
 // ===================== 工具函数 =====================
