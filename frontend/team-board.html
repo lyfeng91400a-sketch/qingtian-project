@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>团队工作看板 · 晴天</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #4F46E5; --primary-light: #EEF2FF; --success: #059669; --warning: #D97706; --danger: #DC2626;
+  --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB; --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF; --gray-500: #6B7280; --gray-600: #4B5563; --gray-700: #374151;
+  --gray-800: #1F2937; --gray-900: #111827;
+  --radius: 8px; --radius-lg: 12px; --sidebar-w: 220px;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: var(--gray-50); color: var(--gray-800); line-height: 1.6; display: flex; min-height: 100vh; }
+a { color: var(--primary); text-decoration: none; }
+
+/* Sidebar */
+.sidebar { width: var(--sidebar-w); background: #fff; border-right: 1px solid var(--gray-200); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 10; }
+.sidebar-brand { padding: 20px 20px 16px; font-size: 20px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--gray-100); }
+.sidebar-brand .icon { width: 32px; height: 32px; background: var(--primary); color: #fff; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.sidebar-nav { flex: 1; padding: 12px 12px; display: flex; flex-direction: column; gap: 2px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); font-size: 14px; color: var(--gray-600); cursor: pointer; border: none; background: none; width: 100%; text-align: left; text-decoration: none; transition: all 0.15s; }
+.nav-item:hover { background: var(--gray-50); color: var(--gray-900); }
+.nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
+.nav-item .badge { margin-left: auto; background: var(--primary); color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+.sidebar-footer { padding: 12px; border-top: 1px solid var(--gray-100); }
+.user-info { display: flex; align-items: center; gap: 10px; padding: 8px; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; }
+.user-name { font-size: 14px; font-weight: 500; }
+.user-role { font-size: 12px; color: var(--gray-400); }
+.btn-logout { font-size: 11px; color: var(--gray-400); border: none; background: none; cursor: pointer; }
+.btn-logout:hover { color: var(--danger); }
+
+/* Main */
+.main { margin-left: var(--sidebar-w); flex: 1; padding: 24px 32px; }
+.page-header { margin-bottom: 20px; display: flex; align-items: flex-start; justify-content: space-between; }
+.page-header h2 { font-size: 24px; font-weight: 700; }
+.page-header p { color: var(--gray-500); font-size: 14px; margin-top: 4px; }
+
+/* Sub-tabs */
+.sub-tabs { display: flex; gap: 4px; margin-bottom: 24px; background: #fff; border-radius: var(--radius-lg); padding: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--gray-100); width: fit-content; }
+.sub-tab { padding: 8px 18px; border-radius: var(--radius); font-size: 14px; color: var(--gray-600); cursor: pointer; border: none; background: none; font-family: inherit; transition: all 0.15s; text-decoration: none; }
+.sub-tab:hover { background: var(--gray-50); color: var(--gray-900); }
+.sub-tab.active { background: var(--primary); color: #fff; font-weight: 500; }
+.sub-tab.active:hover { background: #4338CA; }
+
+/* Summary cards */
+.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.summary-card { background: #fff; border-radius: var(--radius-lg); padding: 16px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--gray-100); }
+.summary-card .sc-value { font-size: 24px; font-weight: 700; }
+.summary-card .sc-label { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+
+/* Filter bar */
+.filter-bar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; background: #fff; border-radius: var(--radius-lg); padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--gray-100); }
+.filter-bar select, .filter-bar input { padding: 8px 12px; border: 1px solid var(--gray-300); border-radius: var(--radius); font-size: 13px; outline: none; font-family: inherit; background: #fff; }
+.filter-bar select:focus, .filter-bar input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.filter-bar input { flex: 1; min-width: 160px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 14px; border-radius: var(--radius); font-size: 13px; font-weight: 500; border: 1px solid var(--gray-300); background: #fff; color: var(--gray-700); cursor: pointer; transition: all 0.2s; font-family: inherit; text-decoration: none; }
+.btn:hover { background: var(--gray-50); }
+.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover { background: #4338CA; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-link { border: none; background: none; color: var(--primary); padding: 4px 0; font-size: 13px; }
+.btn-link:hover { background: none; text-decoration: underline; }
+
+/* Team member rows */
+.member-card { background: #fff; border-radius: var(--radius-lg); box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--gray-100); margin-bottom: 10px; overflow: hidden; transition: all 0.15s; }
+.member-card:hover { box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+.member-header { display: flex; align-items: center; gap: 14px; padding: 14px 20px; cursor: pointer; user-select: none; }
+.member-header:hover { background: var(--gray-50); }
+.member-avatar { width: 42px; height: 42px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px; flex-shrink: 0; }
+.member-info { flex: 1; min-width: 0; }
+.member-name { font-size: 15px; font-weight: 600; }
+.member-role-label { font-size: 12px; color: var(--gray-400); }
+.member-stats { display: flex; gap: 16px; align-items: center; }
+.member-stat { text-align: center; min-width: 40px; }
+.member-stat .ms-num { font-size: 16px; font-weight: 600; }
+.member-stat .ms-label { font-size: 11px; color: var(--gray-400); }
+.member-stat .ms-num.in-progress { color: var(--warning); }
+.member-stat .ms-num.todo { color: var(--gray-500); }
+.member-stat .ms-num.done { color: var(--success); }
+.load-bar-wrap { width: 120px; }
+.load-bar { height: 8px; background: var(--gray-100); border-radius: 4px; overflow: hidden; position: relative; }
+.load-bar .bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+.load-bar .bar-fill.overloaded { background: var(--danger); }
+.load-bar .bar-fill.normal { background: var(--warning); }
+.load-bar .bar-fill.idle { background: var(--success); }
+.load-label { font-size: 11px; color: var(--gray-400); margin-top: 2px; text-align: center; }
+.status-tag { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; white-space: nowrap; }
+.status-tag.overloaded { background: #FEE2E2; color: var(--danger); }
+.status-tag.normal { background: #FEF3C7; color: var(--warning); }
+.status-tag.idle { background: #D1FAE5; color: var(--success); }
+
+.expand-icon { font-size: 12px; color: var(--gray-400); transition: transform 0.2s; flex-shrink: 0; }
+.expand-icon.open { transform: rotate(90deg); }
+
+/* Expanded task table */
+.task-table-wrap { overflow: hidden; max-height: 0; transition: max-height 0.3s ease; }
+.task-table-wrap.open { max-height: 600px; }
+.task-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.task-table th { text-align: left; padding: 10px 20px; background: var(--gray-50); color: var(--gray-500); font-weight: 500; font-size: 12px; border-top: 1px solid var(--gray-100); }
+.task-table td { padding: 10px 20px; border-bottom: 1px solid var(--gray-50); }
+.task-table tr:hover td { background: var(--gray-50); }
+.task-table .task-title { font-weight: 500; color: var(--gray-800); }
+.task-table .task-title a { color: var(--gray-800); }
+.task-table .task-title a:hover { color: var(--primary); }
+.priority-tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
+.priority-high { background: #FEE2E2; color: var(--danger); }
+.priority-medium { background: #FEF3C7; color: var(--warning); }
+.priority-low { background: #D1FAE5; color: var(--success); }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.status-dot.in_progress { background: var(--warning); }
+.status-dot.todo { background: var(--gray-300); }
+.status-dot.done { background: var(--success); }
+.overdue-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #FEE2E2; color: var(--danger); font-weight: 500; }
+
+/* Alert banner */
+.alert-banner { display: none; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: var(--radius-lg); padding: 12px 20px; margin-bottom: 20px; font-size: 13px; color: #92400E; align-items: center; gap: 8px; }
+.alert-banner.show { display: flex; }
+.alert-banner .alert-icon { font-size: 18px; }
+
+/* Token usage card */
+.token-card { background: #fff; border-radius: var(--radius-lg); box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--gray-100); margin-bottom: 20px; }
+.token-card .card-header { padding: 16px 20px; border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; justify-content: space-between; }
+.token-card .card-header h3 { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.token-card .card-body { padding: 0; }
+.token-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.token-table th { text-align: left; padding: 12px 20px; background: var(--gray-50); color: var(--gray-500); font-weight: 500; font-size: 12px; border-bottom: 1px solid var(--gray-100); }
+.token-table td { padding: 10px 20px; border-bottom: 1px solid var(--gray-50); }
+.token-table tr:last-child td { border-bottom: none; }
+.token-table tr:hover td { background: var(--gray-50); }
+.token-table .t-agent { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.token-table .t-agent .t-avatar { width: 28px; height: 28px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.token-table .t-num { font-variant-numeric: tabular-nums; font-size: 13px; }
+.token-table .t-bar-wrap { width: 100px; }
+.token-table .t-bar { height: 6px; background: var(--gray-100); border-radius: 3px; overflow: hidden; }
+.token-table .t-bar .t-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #4F46E5, #7C3AED); transition: width 0.4s; }
+.token-table .t-total { font-weight: 600; color: var(--primary); }
+
+.empty-state { text-align: center; padding: 40px; color: var(--gray-400); font-size: 14px; }
+
+@media (max-width: 1024px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } .member-stats { flex-wrap: wrap; gap: 8px; } }
+@media (max-width: 768px) { .sidebar { display: none; } .main { margin-left: 0; } .member-header { flex-wrap: wrap; } .load-bar-wrap { width: 80px; } }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <a href="dashboard.html" class="sidebar-brand" style="text-decoration:none;color:var(--primary);">
+    <div class="icon">☀️</div>晴天
+  </a>
+  <nav class="sidebar-nav">
+    <a href="dashboard.html" class="nav-item">📊 仪表盘</a>
+    <a href="projects.html" class="nav-item">📁 项目 <span class="badge" id="proj-badge">0</span></a>
+    <a href="team-board.html" class="nav-item active">👥 团队工作 <span class="badge" id="team-badge">6</span></a>
+    <a href="team-resource.html" class="nav-item">📊 资源分配</a>
+    <span class="nav-item" onclick="alert('原型占位：日历视图')">📅 日历</span>
+    <span class="nav-item" onclick="alert('原型占位：报表页面')">📈 报表</span>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-info">
+      <div class="avatar" style="background:linear-gradient(135deg,#667eea,#764ba2);" id="sidebar-avatar">七</div>
+      <div>
+        <div class="user-name" id="sidebar-name">童七七</div>
+        <div class="user-role">产品负责人</div>
+      </div>
+    </div>
+    <button class="btn-logout" onclick="logout()" style="margin:8px 0 0 8px;">退出登录</button>
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="main">
+  <div class="page-header">
+    <div>
+      <h2>👥 团队管理</h2>
+      <p>了解每个 Agent 的工作状态和负载情况</p>
+    </div>
+    <a href="dashboard.html" class="btn">← 返回仪表盘</a>
+  </div>
+
+  <!-- Sub-tabs -->
+  <div class="sub-tabs">
+    <span class="sub-tab active">📋 工作任务看板</span>
+    <a href="team-resource.html" class="sub-tab">📊 资源分配安排</a>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-grid" id="summary-grid"></div>
+
+  <!-- Token 用量 -->
+  <div class="token-card" id="token-card">
+    <div class="card-header">
+      <h3>🔢 Token 用量</h3>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:12px;color:var(--gray-400);" id="token-update-time">更新于 —</span>
+        <button class="btn btn-sm btn-primary" onclick="refreshTokenUsage()" id="token-refresh-btn">🔄 刷新</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <table class="token-table">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th style="width:100px;">今日用量</th>
+            <th style="width:100px;">本周用量</th>
+            <th style="width:100px;">本月用量</th>
+            <th style="width:160px;">使用占比</th>
+          </tr>
+        </thead>
+        <tbody id="token-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alert banner -->
+  <div class="alert-banner" id="alert-banner">
+    <span class="alert-icon">⚠️</span>
+    <span id="alert-text"></span>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <select id="filter-status" onchange="renderBoard()">
+      <option value="all">全部状态</option>
+      <option value="todo">📋 待办</option>
+      <option value="in_progress">🔄 进行中</option>
+      <option value="done">✅ 已完成</option>
+    </select>
+    <select id="filter-member" onchange="renderBoard()">
+      <option value="all">全部成员</option>
+    </select>
+    <select id="filter-project" onchange="renderBoard()">
+      <option value="all">全部项目</option>
+    </select>
+    <input type="text" id="search-keyword" placeholder="🔍 搜索任务标题..." oninput="renderBoard()">
+    <button class="btn btn-sm" onclick="resetFilters()">重置</button>
+  </div>
+
+  <!-- Member list -->
+  <div id="board-list"></div>
+</main>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+// ===== Mock Data =====
+const TEAM_MEMBERS = [
+  {
+    user_id: 'u1', name: '蒋小花', avatar: '花', role: '创作者',
+    avatarBg: 'linear-gradient(135deg, #EC4899, #F472B6)',
+    task_counts: { todo: 1, in_progress: 2, done: 1, overdue: 0 },
+    load_index: 5, load_status: 'overloaded',
+    tasks: [
+      { id: 't1', title: '7月内容日历排期', status: 'in_progress', priority: 'high', due_date: '07-03', project_name: '小红书运营', project_color: '#EC4899', is_overdue: false },
+      { id: 't2', title: '本周星座运势稿件', status: 'in_progress', priority: 'high', due_date: '07-05', project_name: '穗穗念', project_color: '#4F46E5', is_overdue: false },
+      { id: 't3', title: '视频笔记拍摄计划', status: 'todo', priority: 'high', due_date: '07-10', project_name: '小红书运营', project_color: '#EC4899', is_overdue: false },
+      { id: 't4', title: '品牌合作素材整理', status: 'done', priority: 'medium', due_date: '07-01', project_name: '穗穗念', project_color: '#4F46E5', is_overdue: false },
+    ]
+  },
+  {
+    user_id: 'u2', name: '童七七', avatar: '七', role: '产品/运营',
+    avatarBg: 'linear-gradient(135deg, #667eea, #764ba2)',
+    task_counts: { todo: 1, in_progress: 3, done: 1, overdue: 0 },
+    load_index: 7, load_status: 'overloaded',
+    tasks: [
+      { id: 't5', title: '7月内容日历排期', status: 'in_progress', priority: 'high', due_date: '07-03', project_name: '小红书运营', project_color: '#EC4899', is_overdue: false },
+      { id: 't6', title: '本周星座运势稿件', status: 'in_progress', priority: 'high', due_date: '07-05', project_name: '穗穗念', project_color: '#4F46E5', is_overdue: false },
+      { id: 't7', title: '用户反馈收集整理', status: 'in_progress', priority: 'medium', due_date: '07-04', project_name: '穗穗念', project_color: '#4F46E5', is_overdue: false },
+      { id: 't8', title: '视频笔记拍摄计划', status: 'todo', priority: 'high', due_date: '07-10', project_name: '小红书运营', project_color: '#EC4899', is_overdue: false },
+      { id: 't9', title: '竞品分析报告', status: 'done', priority: 'medium', due_date: '06-30', project_name: '数据分析', project_color: '#059669', is_overdue: false },
+    ]
+  },
+  {
+    user_id: 'u3', name: '赵工', avatar: '赵', role: '开发',
+    avatarBg: 'linear-gradient(135deg, #3B82F6, #60A5FA)',
+    task_counts: { todo: 0, in_progress: 2, done: 1, overdue: 1 },
+    load_index: 4, load_status: 'normal',
+    tasks: [
+      { id: 't10', title: '看板页面 API 对接', status: 'in_progress', priority: 'high', due_date: '07-04', project_name: '晴天项目', project_color: '#4F46E5', is_overdue: false },
+      { id: 't11', title: '拖拽功能实现', status: 'in_progress', priority: 'high', due_date: '07-06', project_name: '晴天项目', project_color: '#4F46E5', is_overdue: false },
+      { id: 't12', title: '登录页样式调整', status: 'done', priority: 'low', due_date: '06-28', project_name: '晴天项目', project_color: '#4F46E5', is_overdue: false },
+      { id: 't13', title: '数据备份脚本', status: 'in_progress', priority: 'medium', due_date: '06-25', project_name: '基础建设', project_color: '#65A30D', is_overdue: true },
+    ]
+  },
+  {
+    user_id: 'u4', name: '沅儿', avatar: '沅', role: '数据分析',
+    avatarBg: 'linear-gradient(135deg, #059669, #34D399)',
+    task_counts: { todo: 1, in_progress: 1, done: 2, overdue: 0 },
+    load_index: 3, load_status: 'normal',
+    tasks: [
+      { id: 't14', title: '竞品数据采集与分析', status: 'in_progress', priority: 'high', due_date: '07-05', project_name: '数据分析', project_color: '#059669', is_overdue: false },
+      { id: 't15', title: '用户画像报告', status: 'todo', priority: 'medium', due_date: '07-12', project_name: '穗穗念', project_color: '#4F46E5', is_overdue: false },
+      { id: 't16', title: '6月数据周报', status: 'done', priority: 'medium', due_date: '06-28', project_name: '数据分析', project_color: '#059669', is_overdue: false },
+      { id: 't17', title: 'A/B 测试方案', status: 'done', priority: 'low', due_date: '06-25', project_name: '小红书运营', project_color: '#EC4899', is_overdue: false },
+    ]
+  },
+  {
+    user_id: 'u5', name: '利好', avatar: '利', role: '运营',
+    avatarBg: 'linear-gradient(135deg, #D97706, #FBBF24)',
+    task_counts: { todo: 1, in_progress: 1, done: 0, overdue: 0 },
+    load_index: 3, load_status: 'normal',
+    tasks: [
+      { id: 't18', title: '品牌合作方案', status: 'in_progress', priority: 'high', due_date: '07-08', project_name: '小红书运营', project_color: '#EC4899', is_overdue: false },
+      { id: 't19', title: '社群运营计划', status: 'todo', priority: 'medium', due_date: '07-15', project_name: '穗穗念', project_color: '#4F46E5', is_overdue: false },
+      { id: 't20', title: '创作者招募', status: 'todo', priority: 'low', due_date: '07-20', project_name: '小红书运营', project_color: '#EC4899', is_overdue: false },
+    ]
+  },
+  {
+    user_id: 'u6', name: '二哥', avatar: '二', role: '基础建设',
+    avatarBg: 'linear-gradient(135deg, #65A30D, #84CC16)',
+    task_counts: { todo: 0, in_progress: 1, done: 0, overdue: 0 },
+    load_index: 2, load_status: 'idle',
+    tasks: [
+      { id: 't21', title: '流程文档编写', status: 'in_progress', priority: 'medium', due_date: '07-10', project_name: '基础建设', project_color: '#65A30D', is_overdue: false },
+    ]
+  }
+];
+
+const PROJECTS = [
+  { name: '小红书运营', color: '#EC4899' },
+  { name: '穗穗念', color: '#4F46E5' },
+  { name: '晴天项目', color: '#4F46E5' },
+  { name: '数据分析', color: '#059669' },
+  { name: '基础建设', color: '#65A30D' },
+];
+
+// ===== Helper =====
+function priorityLabel(p) { return p === 'high' ? '高' : p === 'medium' ? '中' : '低'; }
+function statusLabel(s) { return { todo: '📋 待办', in_progress: '🔄 进行中', done: '✅ 已完成' }[s] || s; }
+
+function loadIndexToPercent(idx) { return Math.min(100, Math.round(idx / 7 * 100)); }
+
+// ===== Render =====
+function renderSummary() {
+  var total = TEAM_MEMBERS.length;
+  var overloaded = TEAM_MEMBERS.filter(function(m) { return m.load_status === 'overloaded'; }).length;
+  var idle = TEAM_MEMBERS.filter(function(m) { return m.load_status === 'idle'; }).length;
+  var totalTasks = 0;
+  TEAM_MEMBERS.forEach(function(m) {
+    var c = m.task_counts;
+    totalTasks += (c.todo || 0) + (c.in_progress || 0) + (c.done || 0);
+  });
+
+  document.getElementById('summary-grid').innerHTML =
+    '<div class="summary-card"><div class="sc-value">' + total + '</div><div class="sc-label">👥 团队成员</div></div>' +
+    '<div class="summary-card"><div class="sc-value">' + totalTasks + '</div><div class="sc-label">📋 总任务数</div></div>' +
+    '<div class="summary-card"><div class="sc-value" style="color:var(--danger);">' + overloaded + '</div><div class="sc-label">🔴 过载成员</div></div>' +
+    '<div class="summary-card"><div class="sc-value" style="color:var(--success);">' + idle + '</div><div class="sc-label">🟢 空闲成员</div></div>';
+
+  // Alert banner
+  var banner = document.getElementById('alert-banner');
+  var alertText = document.getElementById('alert-text');
+  if (overloaded > 0 && idle > 0) {
+    var overloadedNames = TEAM_MEMBERS.filter(function(m) { return m.load_status === 'overloaded'; }).map(function(m) { return m.name; }).join('、');
+    var idleNames = TEAM_MEMBERS.filter(function(m) { return m.load_status === 'idle'; }).map(function(m) { return m.name; }).join('、');
+    alertText.textContent = overloadedNames + ' 当前负载较高，建议分配任务给空闲成员（' + idleNames + '）';
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
+}
+
+function populateFilters() {
+  var memberSel = document.getElementById('filter-member');
+  TEAM_MEMBERS.forEach(function(m) {
+    memberSel.innerHTML += '<option value="' + m.name + '">' + m.name + '</option>';
+  });
+  var projSel = document.getElementById('filter-project');
+  PROJECTS.forEach(function(p) {
+    projSel.innerHTML += '<option value="' + p.name + '">' + p.name + '</option>';
+  });
+}
+
+function resetFilters() {
+  document.getElementById('filter-status').value = 'all';
+  document.getElementById('filter-member').value = 'all';
+  document.getElementById('filter-project').value = 'all';
+  document.getElementById('search-keyword').value = '';
+  renderBoard();
+}
+
+function renderBoard() {
+  var statusFilter = document.getElementById('filter-status').value;
+  var memberFilter = document.getElementById('filter-member').value;
+  var projectFilter = document.getElementById('filter-project').value;
+  var keyword = document.getElementById('search-keyword').value.trim().toLowerCase();
+
+  var filtered = TEAM_MEMBERS.filter(function(m) {
+    if (memberFilter !== 'all' && m.name !== memberFilter) return false;
+    if (statusFilter !== 'all') {
+      var hasTaskOfStatus = m.tasks.some(function(t) { return t.status === statusFilter; });
+      if (!hasTaskOfStatus) return false;
+    }
+    if (projectFilter !== 'all') {
+      var hasTaskOfProject = m.tasks.some(function(t) { return t.project_name === projectFilter; });
+      if (!hasTaskOfProject) return false;
+    }
+    if (keyword) {
+      var hasMatch = m.tasks.some(function(t) { return t.title.toLowerCase().indexOf(keyword) !== -1; });
+      if (!hasMatch) return false;
+    }
+    return true;
+  });
+
+  document.getElementById('team-badge').textContent = TEAM_MEMBERS.length;
+
+  var html = '';
+  filtered.forEach(function(m, idx) {
+    var pct = loadIndexToPercent(m.load_index);
+    var barClass = m.load_status;
+    var statusTagClass = m.load_status;
+    var statusTagLabel = m.load_status === 'overloaded' ? '🔴 过载' : m.load_status === 'normal' ? '🟡 正常' : '🟢 空闲';
+
+    html += '<div class="member-card">' +
+      '<div class="member-header" onclick="toggleMember(' + idx + ')">' +
+        '<div class="member-avatar" style="background:' + m.avatarBg + ';">' + m.avatar + '</div>' +
+        '<div class="member-info">' +
+          '<div class="member-name">' + m.name + '</div>' +
+          '<div class="member-role-label">' + m.role + '</div>' +
+        '</div>' +
+        '<div class="member-stats">' +
+          '<div class="member-stat"><div class="ms-num in-progress">' + (m.task_counts.in_progress || 0) + '</div><div class="ms-label">进行中</div></div>' +
+          '<div class="member-stat"><div class="ms-num todo">' + (m.task_counts.todo || 0) + '</div><div class="ms-label">待办</div></div>' +
+          '<div class="member-stat"><div class="ms-num done">' + (m.task_counts.done || 0) + '</div><div class="ms-label">已完成</div></div>' +
+          '<div class="load-bar-wrap">' +
+            '<div class="load-bar"><div class="bar-fill ' + barClass + '" style="width:' + pct + '%;"></div></div>' +
+            '<div class="load-label">负载 ' + pct + '%</div>' +
+          '</div>' +
+          '<span class="status-tag ' + statusTagClass + '">' + statusTagLabel + '</span>' +
+        '</div>' +
+        '<span class="expand-icon" id="expand-icon-' + idx + '">▶</span>' +
+      '</div>' +
+      '<div class="task-table-wrap" id="task-table-' + idx + '">' +
+        renderTaskTable(m, statusFilter, projectFilter, keyword) +
+      '</div>' +
+    '</div>';
+  });
+
+  if (!html) {
+    html = '<div class="empty-state">🔍 没有找到匹配的成员或任务</div>';
+  }
+
+  document.getElementById('board-list').innerHTML = html;
+}
+
+function renderTaskTable(member, statusFilter, projectFilter, keyword) {
+  var tasks = member.tasks;
+
+  if (statusFilter !== 'all') {
+    tasks = tasks.filter(function(t) { return t.status === statusFilter; });
+  }
+  if (projectFilter !== 'all') {
+    tasks = tasks.filter(function(t) { return t.project_name === projectFilter; });
+  }
+  if (keyword) {
+    tasks = tasks.filter(function(t) { return t.title.toLowerCase().indexOf(keyword) !== -1; });
+  }
+
+  if (tasks.length === 0) return '<div class="empty-state" style="padding:20px;">暂无任务</div>';
+
+  var html = '<table class="task-table"><thead><tr>' +
+    '<th style="width:80px;">状态</th>' +
+    '<th>任务标题</th>' +
+    '<th style="width:60px;">优先级</th>' +
+    '<th style="width:80px;">截止日期</th>' +
+    '<th style="width:100px;">项目</th>' +
+  '</tr></thead><tbody>';
+
+  tasks.forEach(function(t) {
+    var pClass = 'priority-' + t.priority;
+    var overdueHtml = t.is_overdue ? ' <span class="overdue-tag">逾期</span>' : '';
+    html += '<tr>' +
+      '<td><span class="status-dot ' + t.status + '"></span>' + statusLabel(t.status) + '</td>' +
+      '<td class="task-title"><a href="project-detail.html?id=' + (t.project_name === '晴天项目' ? 'p1' : 'p2') + '&task=' + t.id + '">' + t.title + '</a>' + overdueHtml + '</td>' +
+      '<td><span class="priority-tag ' + pClass + '">' + priorityLabel(t.priority) + '</span></td>' +
+      '<td>' + t.due_date + '</td>' +
+      '<td>' + t.project_name + '</td>' +
+    '</tr>';
+  });
+
+  html += '</tbody></table>';
+  return html;
+}
+
+function toggleMember(idx) {
+  var wrap = document.getElementById('task-table-' + idx);
+  var icon = document.getElementById('expand-icon-' + idx);
+  var isOpen = wrap.classList.contains('open');
+  if (isOpen) {
+    wrap.classList.remove('open');
+    icon.classList.remove('open');
+  } else {
+    wrap.classList.add('open');
+    icon.classList.add('open');
+  }
+}
+
+// ===== Token 用量模拟数据 =====
+var TOKEN_USAGE_AGENTS = [
+  { name: '蒋小花', avatar: '花', avatarBg: 'linear-gradient(135deg, #EC4899, #F472B6)', today: 12580, week: 68200, month: 245000 },
+  { name: '童七七', avatar: '七', avatarBg: 'linear-gradient(135deg, #667eea, #764ba2)', today: 18340, week: 91500, month: 318000 },
+  { name: '赵工', avatar: '赵', avatarBg: 'linear-gradient(135deg, #3B82F6, #60A5FA)', today: 9560, week: 47300, month: 182000 },
+  { name: '沅儿', avatar: '沅', avatarBg: 'linear-gradient(135deg, #059669, #34D399)', today: 7230, week: 35400, month: 128000 },
+  { name: '利好', avatar: '利', avatarBg: 'linear-gradient(135deg, #D97706, #FBBF24)', today: 6840, week: 28100, month: 96000 },
+  { name: '二哥', avatar: '二', avatarBg: 'linear-gradient(135deg, #65A30D, #84CC16)', today: 3420, week: 15200, month: 58000 },
+];
+
+function formatTokens(n) {
+  if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k';
+  return String(n);
+}
+
+function renderTokenUsage() {
+  var maxMonth = 0;
+  TOKEN_USAGE_AGENTS.forEach(function(a) { if (a.month > maxMonth) maxMonth = a.month; });
+
+  var html = '';
+  TOKEN_USAGE_AGENTS.forEach(function(a) {
+    var pct = maxMonth > 0 ? Math.round(a.month / maxMonth * 100) : 0;
+    html += '<tr>' +
+      '<td><div class="t-agent"><div class="t-avatar" style="background:' + a.avatarBg + ';">' + a.avatar + '</div>' + a.name + '</div></td>' +
+      '<td class="t-num">' + formatTokens(a.today) + '</td>' +
+      '<td class="t-num">' + formatTokens(a.week) + '</td>' +
+      '<td class="t-num t-total">' + formatTokens(a.month) + '</td>' +
+      '<td><div class="t-bar-wrap"><div class="t-bar"><div class="t-fill" style="width:' + pct + '%;"></div></div></div></td>' +
+    '</tr>';
+  });
+
+  document.getElementById('token-table-body').innerHTML = html;
+
+  // Update timestamp
+  var now = new Date();
+  var timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+  document.getElementById('token-update-time').textContent = '更新于 ' + (now.getMonth() + 1) + '/' + now.getDate() + ' ' + timeStr;
+}
+
+function refreshTokenUsage() {
+  var btn = document.getElementById('token-refresh-btn');
+  btn.textContent = '⏳ 刷新中...';
+  btn.disabled = true;
+
+  // Simulate a short delay
+  setTimeout(function () {
+    // Randomize token values slightly to simulate refresh
+    TOKEN_USAGE_AGENTS.forEach(function (a) {
+      var factor = 0.9 + Math.random() * 0.2;
+      a.today = Math.round(a.today * factor);
+      a.week = Math.round(a.week * factor);
+      a.month = Math.round(a.month * factor);
+    });
+    renderTokenUsage();
+    btn.textContent = '🔄 刷新';
+    btn.disabled = false;
+    showToast('Token 用量已更新', 'success');
+  }, 600);
+}
+
+// ===== Init =====
+var userData = requireLogin();
+if (!userData) { window.location.href = 'login.html'; throw new Error('未登录'); }
+document.getElementById('sidebar-avatar').textContent = userData.avatar || '七';
+document.getElementById('sidebar-name').textContent = userData.name || '童七七';
+
+renderSummary();
+populateFilters();
+renderBoard();
+renderTokenUsage();
+</script>
+
+</body>
+</html>

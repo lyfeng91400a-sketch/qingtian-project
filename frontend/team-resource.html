@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>资源分配安排 · 晴天</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #4F46E5; --primary-light: #EEF2FF; --success: #059669; --warning: #D97706; --danger: #DC2626;
+  --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB; --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF; --gray-500: #6B7280; --gray-600: #4B5563; --gray-700: #374151;
+  --gray-800: #1F2937; --gray-900: #111827;
+  --radius: 8px; --radius-lg: 12px; --sidebar-w: 220px;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: var(--gray-50); color: var(--gray-800); line-height: 1.6; display: flex; min-height: 100vh; }
+a { color: var(--primary); text-decoration: none; }
+
+/* Sidebar */
+.sidebar { width: var(--sidebar-w); background: #fff; border-right: 1px solid var(--gray-200); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 10; }
+.sidebar-brand { padding: 20px 20px 16px; font-size: 20px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--gray-100); }
+.sidebar-brand .icon { width: 32px; height: 32px; background: var(--primary); color: #fff; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.sidebar-nav { flex: 1; padding: 12px 12px; display: flex; flex-direction: column; gap: 2px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); font-size: 14px; color: var(--gray-600); cursor: pointer; border: none; background: none; width: 100%; text-align: left; text-decoration: none; transition: all 0.15s; }
+.nav-item:hover { background: var(--gray-50); color: var(--gray-900); }
+.nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
+.nav-item .badge { margin-left: auto; background: var(--primary); color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+.sidebar-footer { padding: 12px; border-top: 1px solid var(--gray-100); }
+.user-info { display: flex; align-items: center; gap: 10px; padding: 8px; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; }
+.user-name { font-size: 14px; font-weight: 500; }
+.user-role { font-size: 12px; color: var(--gray-400); }
+.btn-logout { font-size: 11px; color: var(--gray-400); border: none; background: none; cursor: pointer; }
+.btn-logout:hover { color: var(--danger); }
+
+/* Main */
+.main { margin-left: var(--sidebar-w); flex: 1; padding: 24px 32px; }
+.page-header { margin-bottom: 20px; display: flex; align-items: flex-start; justify-content: space-between; }
+.page-header h2 { font-size: 24px; font-weight: 700; }
+.page-header p { color: var(--gray-500); font-size: 14px; margin-top: 4px; }
+
+/* Sub-tabs */
+.sub-tabs { display: flex; gap: 4px; margin-bottom: 24px; background: #fff; border-radius: var(--radius-lg); padding: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--gray-100); width: fit-content; }
+.sub-tab { padding: 8px 18px; border-radius: var(--radius); font-size: 14px; color: var(--gray-600); cursor: pointer; border: none; background: none; font-family: inherit; transition: all 0.15s; text-decoration: none; }
+.sub-tab:hover { background: var(--gray-50); color: var(--gray-900); }
+.sub-tab.active { background: var(--primary); color: #fff; font-weight: 500; }
+.sub-tab.active:hover { background: #4338CA; }
+
+/* View toggle */
+.view-toggle { display: flex; gap: 4px; margin-bottom: 20px; background: #fff; border-radius: var(--radius-lg); padding: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--gray-100); width: fit-content; }
+.view-btn { padding: 8px 18px; border-radius: var(--radius); font-size: 14px; color: var(--gray-600); cursor: pointer; border: none; background: none; font-family: inherit; transition: all 0.15s; }
+.view-btn:hover { background: var(--gray-50); color: var(--gray-900); }
+.view-btn.active { background: var(--primary); color: #fff; font-weight: 500; }
+.view-btn.active:hover { background: #4338CA; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 14px; border-radius: var(--radius); font-size: 13px; font-weight: 500; border: 1px solid var(--gray-300); background: #fff; color: var(--gray-700); cursor: pointer; transition: all 0.2s; font-family: inherit; text-decoration: none; }
+.btn:hover { background: var(--gray-50); }
+.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover { background: #4338CA; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+.priority-tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
+.priority-high { background: #FEE2E2; color: var(--danger); }
+.priority-medium { background: #FEF3C7; color: var(--warning); }
+.priority-low { background: #D1FAE5; color: var(--success); }
+
+.empty-state { text-align: center; padding: 40px; color: var(--gray-400); font-size: 14px; }
+
+/* ===== Workload view ===== */
+.workload-view { display: none; }
+.workload-view.active { display: block; }
+
+.resource-card { background: #fff; border-radius: var(--radius-lg); box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--gray-100); margin-bottom: 10px; overflow: hidden; transition: all 0.15s; }
+.resource-card:hover { box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+.resource-header { display: flex; align-items: center; gap: 14px; padding: 14px 20px; cursor: pointer; user-select: none; }
+.resource-header:hover { background: var(--gray-50); }
+.resource-header.drag-over { background: var(--primary-light); }
+.resource-avatar { width: 40px; height: 40px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 15px; flex-shrink: 0; }
+.resource-info { flex: 1; min-width: 0; }
+.resource-name { font-size: 15px; font-weight: 600; }
+.resource-role-label { font-size: 12px; color: var(--gray-400); }
+.resource-load-wrap { flex: 1; max-width: 300px; }
+.resource-load-bar { height: 20px; background: var(--gray-100); border-radius: 10px; overflow: hidden; position: relative; }
+.resource-load-bar .rl-fill { height: 100%; border-radius: 10px; transition: width 0.4s; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; font-weight: 500; min-width: 36px; }
+.resource-load-bar .rl-fill.overloaded { background: linear-gradient(90deg, #DC2626, #EF4444); }
+.resource-load-bar .rl-fill.normal { background: linear-gradient(90deg, #D97706, #F59E0B); }
+.resource-load-bar .rl-fill.idle { background: linear-gradient(90deg, #059669, #10B981); }
+.resource-load-text { font-size: 12px; color: var(--gray-500); margin-top: 4px; }
+
+/* Resource expand tasks */
+.resource-tasks-wrap { overflow: hidden; max-height: 0; transition: max-height 0.3s ease; }
+.resource-tasks-wrap.open { max-height: 500px; }
+.resource-task-list { padding: 12px 20px 16px; border-top: 1px solid var(--gray-100); display: flex; flex-direction: column; gap: 8px; }
+.resource-task-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--gray-50); border-radius: var(--radius); border: 1px solid var(--gray-100); cursor: grab; transition: all 0.15s; }
+.resource-task-item:active { cursor: grabbing; }
+.resource-task-item:hover { border-color: var(--primary); background: var(--primary-light); }
+.resource-task-item.dragging { opacity: 0.5; }
+.resource-task-item .rti-title { flex: 1; font-size: 13px; font-weight: 500; }
+.resource-task-item .rti-meta { font-size: 11px; color: var(--gray-400); white-space: nowrap; }
+.resource-task-item .rti-assign-btn { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--gray-300); background: #fff; color: var(--gray-600); cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.resource-task-item .rti-assign-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ===== Timeline view ===== */
+.timeline-view { display: none; }
+.timeline-view.active { display: block; }
+
+.timeline-wrap { background: #fff; border-radius: var(--radius-lg); box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--gray-100); overflow-x: auto; }
+.timeline-grid { min-width: 800px; }
+.timeline-header { display: flex; border-bottom: 1px solid var(--gray-200); background: var(--gray-50); position: sticky; top: 0; z-index: 1; }
+.timeline-header .tl-name-col { width: 100px; padding: 10px 14px; font-size: 12px; font-weight: 600; color: var(--gray-500); flex-shrink: 0; }
+.timeline-header .tl-date-row { display: flex; flex: 1; }
+.timeline-header .tl-date-cell { width: 40px; padding: 8px 0; text-align: center; font-size: 11px; color: var(--gray-400); flex-shrink: 0; }
+.timeline-header .tl-date-cell.weekend { color: var(--danger); }
+.timeline-header .tl-date-cell.today { background: var(--primary-light); color: var(--primary); font-weight: 600; border-radius: 4px; }
+
+.timeline-row { display: flex; border-bottom: 1px solid var(--gray-50); min-height: 72px; }
+.timeline-row:last-child { border-bottom: none; }
+.timeline-row .tl-name-col { width: 100px; padding: 10px 14px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+.timeline-row .tl-name-col .tl-avatar { width: 28px; height: 28px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.timeline-row .tl-name-col .tl-name { font-size: 13px; font-weight: 500; }
+.timeline-row .tl-track { flex: 1; position: relative; min-height: 72px; background: repeating-linear-gradient(90deg, transparent, transparent 39px, var(--gray-50) 39px, var(--gray-50) 40px); }
+.timeline-row .tl-track .tl-grid-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--gray-100); }
+.timeline-task-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; font-weight: 500; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.15); transition: all 0.15s; z-index: 1; }
+.timeline-task-bar:hover { transform: translateY(-50%) scale(1.05); z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.timeline-task-bar.high-priority { background: linear-gradient(90deg, #DC2626, #EF4444); }
+.timeline-task-bar.medium-priority { background: linear-gradient(90deg, #D97706, #F59E0B); }
+.timeline-task-bar.low-priority { background: linear-gradient(90deg, #059669, #10B981); }
+
+/* Alert banner */
+.alert-banner { display: none; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: var(--radius-lg); padding: 12px 20px; margin-bottom: 20px; font-size: 13px; color: #92400E; align-items: center; gap: 8px; }
+.alert-banner.show { display: flex; }
+.alert-banner .alert-icon { font-size: 18px; }
+
+/* Reassign modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: #fff; border-radius: var(--radius-lg); width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); padding: 24px; }
+.modal h3 { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+.modal p { font-size: 14px; color: var(--gray-600); margin-bottom: 20px; line-height: 1.5; }
+.modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* Assignee dropdown modal */
+.assignee-select { width: 100%; padding: 10px 14px; border: 1px solid var(--gray-300); border-radius: var(--radius); font-size: 14px; font-family: inherit; outline: none; margin-bottom: 16px; background: #fff; }
+.assignee-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+/* Toast */
+.toast { position: fixed; top: 20px; right: 20px; z-index: 9999; padding: 12px 20px; border-radius: var(--radius); font-size: 14px; font-weight: 500; box-shadow: 0 8px 24px rgba(0,0,0,0.15); color: #fff; max-width: 360px; transform: translateX(120%); transition: transform 0.3s ease; font-family: inherit; }
+
+@media (max-width: 1024px) { .resource-header { flex-wrap: wrap; } .resource-load-wrap { max-width: 100%; width: 100%; margin-top: 8px; } }
+@media (max-width: 768px) { .sidebar { display: none; } .main { margin-left: 0; } }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <a href="dashboard.html" class="sidebar-brand" style="text-decoration:none;color:var(--primary);">
+    <div class="icon">☀️</div>晴天
+  </a>
+  <nav class="sidebar-nav">
+    <a href="dashboard.html" class="nav-item">📊 仪表盘</a>
+    <a href="projects.html" class="nav-item">📁 项目 <span class="badge" id="proj-badge">0</span></a>
+    <a href="team-board.html" class="nav-item">👥 团队工作 <span class="badge" id="team-badge">6</span></a>
+    <a href="team-resource.html" class="nav-item active">📊 资源分配</a>
+    <span class="nav-item" onclick="alert('原型占位：日历视图')">📅 日历</span>
+    <span class="nav-item" onclick="alert('原型占位：报表页面')">📈 报表</span>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-info">
+      <div class="avatar" style="background:linear-gradient(135deg,#667eea,#764ba2);" id="sidebar-avatar">七</div>
+      <div>
+        <div class="user-name" id="sidebar-name">童七七</div>
+        <div class="user-role">产品负责人</div>
+      </div>
+    </div>
+    <button class="btn-logout" onclick="logout()" style="margin:8px 0 0 8px;">退出登录</button>
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="main">
+  <div class="page-header">
+    <div>
+      <h2>👥 团队管理</h2>
+      <p>可视化人力安排与任务分配调整</p>
+    </div>
+    <a href="dashboard.html" class="btn">← 返回仪表盘</a>
+  </div>
+
+  <!-- Sub-tabs -->
+  <div class="sub-tabs">
+    <a href="team-board.html" class="sub-tab">📋 工作任务看板</a>
+    <span class="sub-tab active">📊 资源分配安排</span>
+  </div>
+
+  <!-- View toggle -->
+  <div class="view-toggle">
+    <button class="view-btn active" onclick="switchView('workload')">🏋️ 工作负载视图</button>
+    <button class="view-btn" onclick="switchView('timeline')">📅 时间线视图</button>
+  </div>
+
+  <!-- Alert banner -->
+  <div class="alert-banner" id="alert-banner">
+    <span class="alert-icon">⚠️</span>
+    <span id="alert-text"></span>
+  </div>
+
+  <!-- Workload view -->
+  <div class="workload-view active" id="workload-view">
+    <div id="workload-list"></div>
+  </div>
+
+  <!-- Timeline view -->
+  <div class="timeline-view" id="timeline-view">
+    <div class="timeline-wrap">
+      <div class="timeline-grid" id="timeline-grid"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Reassign modal -->
+<div class="modal-overlay" id="reassign-modal">
+  <div class="modal">
+    <h3>🔄 重新分配任务</h3>
+    <p id="reassign-text">将「任务标题」分配给哪位成员？</p>
+    <select class="assignee-select" id="reassign-select"></select>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeReassignModal()">取消</button>
+      <button class="btn btn-primary" onclick="confirmReassign()">确认分配</button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script>
+// ===== Mock Data =====
+const RESOURCE_DATA = {
+  members: [
+    {
+      user_id: 'u1', name: '蒋小花', avatar: '花', role: '创作者',
+      avatarBg: 'linear-gradient(135deg, #EC4899, #F472B6)',
+      load_percent: 70, current_tasks: 4, max_capacity: 5,
+      tasks: [
+        { id: 't1', title: '7月内容日历排期', priority: 'high', status: 'in_progress', due_date: '07-03', project_name: '小红书运营', start_date: '07-01', end_date: '07-03' },
+        { id: 't2', title: '本周星座运势稿件', priority: 'high', status: 'in_progress', due_date: '07-05', project_name: '穗穗念', start_date: '07-02', end_date: '07-05' },
+        { id: 't3', title: '品牌合作素材整理', priority: 'medium', status: 'done', due_date: '07-01', project_name: '穗穗念', start_date: '06-28', end_date: '07-01' },
+        { id: 't24', title: '视频笔记拍摄计划', priority: 'high', status: 'todo', due_date: '07-10', project_name: '小红书运营', start_date: '07-08', end_date: '07-10' },
+      ]
+    },
+    {
+      user_id: 'u2', name: '童七七', avatar: '七', role: '产品/运营',
+      avatarBg: 'linear-gradient(135deg, #667eea, #764ba2)',
+      load_percent: 80, current_tasks: 4, max_capacity: 5,
+      tasks: [
+        { id: 't5', title: '7月内容日历排期', priority: 'high', status: 'in_progress', due_date: '07-03', project_name: '小红书运营', start_date: '07-01', end_date: '07-03' },
+        { id: 't6', title: '本周星座运势稿件', priority: 'high', status: 'in_progress', due_date: '07-05', project_name: '穗穗念', start_date: '07-02', end_date: '07-05' },
+        { id: 't7', title: '用户反馈收集整理', priority: 'medium', status: 'in_progress', due_date: '07-04', project_name: '穗穗念', start_date: '07-01', end_date: '07-04' },
+        { id: 't8', title: '视频笔记拍摄计划', priority: 'high', status: 'todo', due_date: '07-10', project_name: '小红书运营', start_date: '07-08', end_date: '07-10' },
+      ]
+    },
+    {
+      user_id: 'u3', name: '赵工', avatar: '赵', role: '开发',
+      avatarBg: 'linear-gradient(135deg, #3B82F6, #60A5FA)',
+      load_percent: 60, current_tasks: 3, max_capacity: 5,
+      tasks: [
+        { id: 't10', title: '看板页面 API 对接', priority: 'high', status: 'in_progress', due_date: '07-04', project_name: '晴天项目', start_date: '07-01', end_date: '07-04' },
+        { id: 't11', title: '拖拽功能实现', priority: 'high', status: 'in_progress', due_date: '07-06', project_name: '晴天项目', start_date: '07-03', end_date: '07-06' },
+        { id: 't13', title: '数据备份脚本', priority: 'medium', status: 'in_progress', due_date: '06-25', project_name: '基础建设', start_date: '06-20', end_date: '06-25' },
+      ]
+    },
+    {
+      user_id: 'u4', name: '沅儿', avatar: '沅', role: '数据分析',
+      avatarBg: 'linear-gradient(135deg, #059669, #34D399)',
+      load_percent: 40, current_tasks: 2, max_capacity: 5,
+      tasks: [
+        { id: 't14', title: '竞品数据采集与分析', priority: 'high', status: 'in_progress', due_date: '07-05', project_name: '数据分析', start_date: '07-01', end_date: '07-05' },
+        { id: 't15', title: '用户画像报告', priority: 'medium', status: 'todo', due_date: '07-12', project_name: '穗穗念', start_date: '07-08', end_date: '07-12' },
+      ]
+    },
+    {
+      user_id: 'u5', name: '利好', avatar: '利', role: '运营',
+      avatarBg: 'linear-gradient(135deg, #D97706, #FBBF24)',
+      load_percent: 40, current_tasks: 2, max_capacity: 5,
+      tasks: [
+        { id: 't18', title: '品牌合作方案', priority: 'high', status: 'in_progress', due_date: '07-08', project_name: '小红书运营', start_date: '07-04', end_date: '07-08' },
+        { id: 't19', title: '社群运营计划', priority: 'medium', status: 'todo', due_date: '07-15', project_name: '穗穗念', start_date: '07-10', end_date: '07-15' },
+      ]
+    },
+    {
+      user_id: 'u6', name: '二哥', avatar: '二', role: '基础建设',
+      avatarBg: 'linear-gradient(135deg, #65A30D, #84CC16)',
+      load_percent: 20, current_tasks: 1, max_capacity: 5,
+      tasks: [
+        { id: 't21', title: '流程文档编写', priority: 'medium', status: 'in_progress', due_date: '07-10', project_name: '基础建设', start_date: '07-04', end_date: '07-10' },
+      ]
+    }
+  ],
+  unassigned_tasks: []
+};
+
+// ===== Helpers =====
+function getLoadStatus(pct) {
+  if (pct >= 70) return 'overloaded';
+  if (pct >= 31) return 'normal';
+  return 'idle';
+}
+
+// ===== View switching =====
+var currentView = 'workload';
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.workload-view, .timeline-view').forEach(function(v) { v.classList.remove('active'); });
+
+  if (view === 'workload') {
+    document.querySelector('.view-btn:nth-child(1)').classList.add('active');
+    document.getElementById('workload-view').classList.add('active');
+    renderWorkloadView();
+  } else {
+    document.querySelector('.view-btn:nth-child(2)').classList.add('active');
+    document.getElementById('timeline-view').classList.add('active');
+    renderTimelineView();
+  }
+}
+
+// ===== Workload view =====
+function renderAlertBanner() {
+  var banner = document.getElementById('alert-banner');
+  var alertText = document.getElementById('alert-text');
+  var overloaded = RESOURCE_DATA.members.filter(function(m) { return m.load_percent >= 70; });
+  var idle = RESOURCE_DATA.members.filter(function(m) { return m.load_percent < 30; });
+  if (overloaded.length > 0 && idle.length > 0) {
+    var overloadedNames = overloaded.map(function(m) { return m.name; }).join('、');
+    var idleNames = idle.map(function(m) { return m.name; }).join('、');
+    alertText.textContent = overloadedNames + ' 当前负载较高（' + overloaded[0].current_tasks + '/' + overloaded[0].max_capacity + '），建议分配任务给空闲成员（' + idleNames + '）';
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
+}
+
+function renderWorkloadView() {
+  renderAlertBanner();
+  document.getElementById('team-badge').textContent = RESOURCE_DATA.members.length;
+
+  var html = '';
+  RESOURCE_DATA.members.forEach(function(m, idx) {
+    var status = getLoadStatus(m.load_percent);
+    html += '<div class="resource-card">' +
+      '<div class="resource-header" data-user-id="' + m.user_id + '" ondragover="onDragOver(event)" ondrop="onDrop(event)" onclick="toggleResourceExpand(' + idx + ')">' +
+        '<div class="resource-avatar" style="background:' + m.avatarBg + ';">' + m.avatar + '</div>' +
+        '<div class="resource-info">' +
+          '<div class="resource-name">' + m.name + '</div>' +
+          '<div class="resource-role-label">' + m.role + '</div>' +
+        '</div>' +
+        '<div class="resource-load-wrap">' +
+          '<div class="resource-load-bar"><div class="rl-fill ' + status + '" style="width:' + m.load_percent + '%;">' + m.load_percent + '%</div></div>' +
+          '<div class="resource-load-text">' + m.current_tasks + '/' + m.max_capacity + ' 任务 · ' +
+            (status === 'overloaded' ? '🔴 过载' : status === 'normal' ? '🟡 正常' : '🟢 空闲') +
+          '</div>' +
+        '</div>' +
+        '<span style="font-size:12px;color:var(--gray-400);transition:transform 0.2s;" id="res-expand-' + idx + '">▶</span>' +
+      '</div>' +
+      '<div class="resource-tasks-wrap" id="resource-tasks-' + idx + '">' +
+        '<div class="resource-task-list">' +
+          renderMemberTasks(m) +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  document.getElementById('workload-list').innerHTML = html;
+
+  // Auto-open overloaded members
+  RESOURCE_DATA.members.forEach(function(m, idx) {
+    if (m.load_percent >= 70) {
+      toggleResourceExpand(idx);
+    }
+  });
+}
+
+function renderMemberTasks(member) {
+  var html = '';
+  member.tasks.forEach(function(t) {
+    var pClass = 'priority-' + t.priority;
+    html += '<div class="resource-task-item" draggable="true" ondragstart="onDragStart(event, \'' + t.id + '\')" data-task-id="' + t.id + '">' +
+      '<div class="rti-title">' + t.title + '</div>' +
+      '<span class="priority-tag ' + pClass + '">' + priorityLabel(t.priority) + '</span>' +
+      '<span class="rti-meta">📅 ' + t.due_date + '</span>' +
+      '<span class="rti-meta">📁 ' + t.project_name + '</span>' +
+      '<button class="rti-assign-btn" onclick="event.stopPropagation();openReassignModal(\'' + t.id + '\', \'' + t.title.replace(/'/g, "\\'") + '\')">重新分配</button>' +
+    '</div>';
+  });
+  return html;
+}
+
+function toggleResourceExpand(idx) {
+  var wrap = document.getElementById('resource-tasks-' + idx);
+  var icon = document.getElementById('res-expand-' + idx);
+  var isOpen = wrap.classList.contains('open');
+  if (isOpen) {
+    wrap.classList.remove('open');
+    icon.style.transform = 'rotate(0deg)';
+  } else {
+    wrap.classList.add('open');
+    icon.style.transform = 'rotate(90deg)';
+  }
+}
+
+// ===== Drag & Drop =====
+var _dragTaskId = null;
+
+function onDragStart(event, taskId) {
+  _dragTaskId = taskId;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', taskId);
+  event.target.classList.add('dragging');
+}
+
+function onDragOver(event) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  event.currentTarget.classList.add('drag-over');
+}
+
+function onDrop(event) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('drag-over');
+  var taskId = event.dataTransfer.getData('text/plain');
+  var targetUserId = event.currentTarget.dataset.userId;
+  if (!taskId || !targetUserId) return;
+
+  // Find the task and target member
+  var task = null;
+  var sourceMember = null;
+  RESOURCE_DATA.members.forEach(function(m) {
+    var found = m.tasks.find(function(t) { return t.id === taskId; });
+    if (found) { task = found; sourceMember = m; }
+  });
+  if (!task) return;
+
+  var targetMember = RESOURCE_DATA.members.find(function(m) { return m.user_id === targetUserId; });
+  if (!targetMember || targetMember.user_id === sourceMember.user_id) return;
+
+  // Show reassign modal
+  var taskTitle = task.title;
+  openReassignModal(taskId, taskTitle);
+}
+
+// ===== Reassign modal =====
+var _reassignTaskId = null;
+var _reassignTaskTitle = '';
+
+function openReassignModal(taskId, taskTitle) {
+  _reassignTaskId = taskId;
+  _reassignTaskTitle = taskTitle;
+  document.getElementById('reassign-text').textContent = '将「' + taskTitle + '」分配给哪位成员？';
+
+  var sel = document.getElementById('reassign-select');
+  sel.innerHTML = '';
+  RESOURCE_DATA.members.forEach(function(m) {
+    var hasTask = m.tasks.some(function(t) { return t.id === taskId; });
+    if (!hasTask) {
+      sel.innerHTML += '<option value="' + m.user_id + '">' + m.name + ' (' + m.role + ' · 负载' + m.load_percent + '%)</option>';
+    }
+  });
+
+  document.getElementById('reassign-modal').classList.add('active');
+}
+
+function closeReassignModal() {
+  document.getElementById('reassign-modal').classList.remove('active');
+  _reassignTaskId = null;
+}
+
+function confirmReassign() {
+  var targetUserId = document.getElementById('reassign-select').value;
+  if (!targetUserId || !_reassignTaskId) return;
+
+  // Simulate reassign
+  var task = null;
+  var sourceMember = null;
+  RESOURCE_DATA.members.forEach(function(m) {
+    var idx = m.tasks.findIndex(function(t) { return t.id === _reassignTaskId; });
+    if (idx !== -1) { task = m.tasks[idx]; sourceMember = m; m.tasks.splice(idx, 1); }
+  });
+
+  var targetMember = RESOURCE_DATA.members.find(function(m) { return m.user_id === targetUserId; });
+  if (task && targetMember) {
+    task.status = 'todo';
+    targetMember.tasks.push(task);
+    // Recalculate loads
+    recalcLoads();
+    showToast('✅ 已将「' + task.title + '」分配给 ' + targetMember.name, 'success');
+  }
+
+  closeReassignModal();
+  renderWorkloadView();
+}
+
+function recalcLoads() {
+  RESOURCE_DATA.members.forEach(function(m) {
+    var active = m.tasks.filter(function(t) { return t.status !== 'done'; });
+    m.current_tasks = active.length;
+    m.load_percent = Math.min(100, Math.round(active.length / m.max_capacity * 100));
+  });
+}
+
+// ===== Timeline view =====
+function renderTimelineView() {
+  // Generate date range: 07-01 to 07-15
+  var startDate = new Date(2026, 6, 1);
+  var endDate = new Date(2026, 6, 15);
+  var dates = [];
+  var d = new Date(startDate);
+  while (d <= endDate) {
+    dates.push({
+      day: d.getDate(),
+      month: d.getMonth() + 1,
+      dateStr: (d.getMonth() + 1).toString().padStart(2, '0') + '-' + d.getDate().toString().padStart(2, '0'),
+      weekday: d.getDay(),
+      isWeekend: d.getDay() === 0 || d.getDay() === 6,
+      isToday: d.getDate() === 2 && d.getMonth() === 6 && d.getFullYear() === 2026 // 07-02
+    });
+    d.setDate(d.getDate() + 1);
+  }
+
+  var dayWidth = 40;
+  var totalWidth = dates.length * dayWidth;
+
+  // Header
+  var headerHtml = '<div class="timeline-header"><div class="tl-name-col">成员</div><div class="tl-date-row">';
+  dates.forEach(function(dt) {
+    var cls = 'tl-date-cell';
+    if (dt.isWeekend) cls += ' weekend';
+    if (dt.isToday) cls += ' today';
+    headerHtml += '<div class="' + cls + '" style="width:' + dayWidth + 'px;">' + dt.month + '/' + dt.day + '</div>';
+  });
+  headerHtml += '</div></div>';
+
+  // Rows
+  var rowsHtml = '';
+  RESOURCE_DATA.members.forEach(function(m) {
+    rowsHtml += '<div class="timeline-row">' +
+      '<div class="tl-name-col">' +
+        '<div class="tl-avatar" style="background:' + m.avatarBg + ';">' + m.avatar + '</div>' +
+        '<span class="tl-name">' + m.name + '</span>' +
+      '</div>' +
+      '<div class="tl-track" style="position:relative;">';
+
+    // Grid lines
+    dates.forEach(function(dt, i) {
+      rowsHtml += '<div class="tl-grid-line" style="left:' + (i * dayWidth) + 'px;"></div>';
+    });
+
+    // Task bars
+    var activeTasks = m.tasks.filter(function(t) { return t.status !== 'done'; });
+    activeTasks.forEach(function(t) {
+      var startParts = t.start_date ? t.start_date.split('-') : t.due_date.split('-');
+      var endParts = t.end_date ? t.end_date.split('-') : t.due_date.split('-');
+      var startIdx = dates.findIndex(function(dt) { return dt.dateStr === (startParts[0] + '-' + startParts[1]); });
+      var endIdx = dates.findIndex(function(dt) { return dt.dateStr === (endParts[0] + '-' + endParts[1]); });
+      if (startIdx === -1) startIdx = 0;
+      if (endIdx === -1) endIdx = dates.length - 1;
+
+      var left = startIdx * dayWidth + 2;
+      var width = Math.max(dayWidth - 4, (endIdx - startIdx + 1) * dayWidth - 4);
+      var pClass = t.priority === 'high' ? 'high-priority' : t.priority === 'medium' ? 'medium-priority' : 'low-priority';
+
+      rowsHtml += '<div class="timeline-task-bar ' + pClass + '" style="left:' + left + 'px;width:' + width + 'px;" title="' + t.title + '">' + t.title + '</div>';
+    });
+
+    rowsHtml += '</div></div>';
+  });
+
+  document.getElementById('timeline-grid').innerHTML = headerHtml + rowsHtml;
+}
+
+// ===== Init =====
+var userData = requireLogin();
+if (!userData) { window.location.href = 'login.html'; throw new Error('未登录'); }
+document.getElementById('sidebar-avatar').textContent = userData.avatar || '七';
+document.getElementById('sidebar-name').textContent = userData.name || '童七七';
+
+renderWorkloadView();
+
+// Close modal on overlay click
+document.getElementById('reassign-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeReassignModal();
+});
+</script>
+
+</body>
+</html>
