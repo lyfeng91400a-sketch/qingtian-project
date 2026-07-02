@@ -581,7 +581,7 @@ function renderTimelineView() {
 
 // ===== Init =====
 var userData = requireLogin();
-if (!userData) { window.location.href = 'login.html'; throw new Error('未登录'); }
+if (!userData) { window.location.href = 'index.html'; throw new Error('未登录'); }
 document.getElementById('sidebar-avatar').textContent = userData.avatar || '七';
 document.getElementById('sidebar-name').textContent = userData.name || '童七七';
 
