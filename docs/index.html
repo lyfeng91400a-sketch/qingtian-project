@@ -343,6 +343,8 @@ a { color: var(--primary); text-decoration: none; }
 @media (max-width: 1024px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } .dashboard-grid { grid-template-columns: 1fr; } .projects-grid { grid-template-columns: repeat(2, 1fr); } .summary-grid { grid-template-columns: repeat(2, 1fr); } .member-stats { flex-wrap: wrap; gap: 8px; } .resource-header { flex-wrap: wrap; } .resource-load-wrap { max-width: 100%; width: 100%; margin-top: 8px; } }
 @media (max-width: 768px) { .sidebar { display: none; } .main { margin-left: 0; padding: 16px; } .stats-grid { grid-template-columns: 1fr; } .projects-grid { grid-template-columns: 1fr; } .kanban-board { grid-template-columns: 1fr; } .modal { width: 90vw; } .form-row { flex-direction: column; } .member-header { flex-wrap: wrap; } .load-bar-wrap { width: 80px; } }
 </style>
+<script src="config.js"></script>
+<script src="api.js"></script>
 </head>
 <body>
 
@@ -835,26 +837,16 @@ function initView(view) {
 }
 
 // ===================== 登录 =====================
-async function handleLogin(e) {
+function handleLogin(e) {
   e.preventDefault();
   var email = document.getElementById('email').value;
-  var password = document.getElementById('password').value;
-
-  // Try API first
-  try {
-    var user = await doLoginApi(email, password);
-    navigateTo('dashboard');
-    return;
-  } catch (err) {
-    // Fallback: local login
-    localStorage.setItem('qingtian_user', JSON.stringify({
-      name: '童七七', role: '产品负责人', avatar: '七', email: email
-    }));
-    localStorage.setItem('qingtian_token', 'local_demo_token');
-    // 设置离线模式标记，后续 API 调用使用 mock 数据
-    localStorage.setItem('qingtian_offline', 'true');
-    navigateTo('dashboard');
-  }
+  // 离线模式 — 无论密码正确与否，均以童七七身份登录
+  localStorage.setItem('qingtian_user', JSON.stringify({
+    name: '童七七', role: '产品负责人', avatar: '七', email: email
+  }));
+  localStorage.setItem('qingtian_token', 'local_demo_token');
+  localStorage.setItem('qingtian_offline', 'true');
+  navigateTo('dashboard');
 }
 
 // ===================== 项目 CRUD =====================
@@ -1013,7 +1005,36 @@ async function renderDashboard() {
     document.getElementById('urgent-count').textContent = myTasks.length;
     renderMyTasks(myTasks, projects);
     renderRecentDashboardProjects(recentProjects);
-  } catch (err) { showToast(err.message, 'error'); }
+  } catch (err) {
+    // 离线模式：使用 mock 数据填充仪表盘
+    var mockProjects = [
+      { id: 'p1', name: '晴天项目', description: '轻量级项目协作平台', color: '#4F46E5', task_count: 4, progress: 25 },
+      { id: 'p2', name: '小红书运营', description: '内容创作与品牌合作', color: '#EC4899', task_count: 5, progress: 40 },
+      { id: 'p3', name: '穗穗念', description: '星座运势与粉丝运营', color: '#4F46E5', task_count: 4, progress: 50 },
+      { id: 'p4', name: '数据分析', description: '竞品分析与用户画像', color: '#059669', task_count: 3, progress: 67 },
+      { id: 'p5', name: '基础建设', description: '工具链与流程文档', color: '#65A30D', task_count: 2, progress: 50 },
+    ];
+    var mockStats = { active_projects: 5, done_tasks: 5, in_progress_tasks: 11, todo_tasks: 5, total_tasks: 21 };
+    var mockMyTasks = [
+      { id: 't5', title: '7月内容日历排期', status: 'in_progress', priority: 'high', due_date: '07-03', pid: 'p2', assignee_id: '童七七' },
+      { id: 't6', title: '本周星座运势稿件', status: 'in_progress', priority: 'high', due_date: '07-05', pid: 'p3', assignee_id: '童七七' },
+      { id: 't7', title: '用户反馈收集整理', status: 'in_progress', priority: 'medium', due_date: '07-04', pid: 'p3', assignee_id: '童七七' },
+      { id: 't8', title: '视频笔记拍摄计划', status: 'todo', priority: 'high', due_date: '07-10', pid: 'p2', assignee_id: '童七七' },
+      { id: 't9', title: '竞品分析报告', status: 'done', priority: 'medium', due_date: '06-30', pid: 'p4', assignee_id: '童七七' },
+    ];
+    document.getElementById('proj-badge').textContent = mockProjects.length;
+    document.getElementById('stat-projects').textContent = mockStats.active_projects;
+    document.getElementById('stat-done').textContent = mockStats.done_tasks;
+    document.getElementById('stat-progress').textContent = mockStats.in_progress_tasks;
+    document.getElementById('stat-todo').textContent = mockStats.todo_tasks;
+    document.getElementById('stat-projects-change').textContent = mockProjects.length + ' 个项目中';
+    document.getElementById('stat-done-change').textContent = '完成率 ' + Math.round(mockStats.done_tasks / mockStats.total_tasks * 100) + '%';
+    document.getElementById('stat-progress-change').textContent = mockStats.in_progress_tasks + ' 个进行中';
+    document.getElementById('stat-todo-change').textContent = mockStats.todo_tasks + ' 个待处理';
+    document.getElementById('urgent-count').textContent = mockMyTasks.length;
+    renderMyTasks(mockMyTasks, mockProjects);
+    renderRecentDashboardProjects(mockProjects);
+  }
 }
 
 function renderMyTasks(tasks, projects) {
