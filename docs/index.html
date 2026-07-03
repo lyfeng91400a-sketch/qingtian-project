@@ -836,6 +836,8 @@ async function handleLogin(e) {
       name: '童七七', role: '产品负责人', avatar: '七', email: email
     }));
     localStorage.setItem('qingtian_token', 'local_demo_token');
+    // 设置离线模式标记，后续 API 调用使用 mock 数据
+    localStorage.setItem('qingtian_offline', 'true');
     navigateTo('dashboard');
   }
 }
@@ -1802,6 +1804,14 @@ document.getElementById('reassign-modal').addEventListener('click', function(e) 
 (function initApp() {
   var user = getCurrentUser();
   var token = getToken();
+
+  // 兼容旧版：清除已过期的真实 JWT，转为离线模式
+  if (token && token.startsWith('eyJ')) {
+    localStorage.setItem('qingtian_token', 'local_demo_token');
+    localStorage.setItem('qingtian_offline', 'true');
+    token = 'local_demo_token';
+  }
+
   var hash = window.location.hash.replace(/^#/, '') || '';
 
   if (hash) {
