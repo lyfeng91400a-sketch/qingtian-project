@@ -835,6 +835,7 @@ async function handleLogin(e) {
     localStorage.setItem('qingtian_user', JSON.stringify({
       name: '童七七', role: '产品负责人', avatar: '七', email: email
     }));
+    localStorage.setItem('qingtian_token', 'local_demo_token');
     navigateTo('dashboard');
   }
 }
