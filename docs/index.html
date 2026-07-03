@@ -703,17 +703,32 @@ function getAuthHeaders() {
 }
 
 async function apiRequest(method, path, body) {
+  // 离线模式直接抛错，由调用方 fallback 到 mock 数据
+  if (localStorage.getItem('qingtian_offline') === 'true') {
+    throw new Error('离线模式');
+  }
   var url = API_BASE + path;
   var options = { method: method, headers: getAuthHeaders() };
   if (body) options.body = JSON.stringify(body);
-  var res = await fetch(url, options);
-  if (!res.ok) {
-    var detail = '请求失败: ' + res.status;
-    try { var err = await res.json(); detail = err.detail || detail; } catch (e) {}
-    throw new Error(detail);
+  try {
+    var res = await fetch(url, options);
+    if (!res.ok) {
+      var detail = '请求失败: ' + res.status;
+      try { var err = await res.json(); detail = err.detail || detail; } catch (e) {}
+      // 401 也切换离线模式
+      if (res.status === 401) {
+        localStorage.setItem('qingtian_offline', 'true');
+      }
+      throw new Error(detail);
+    }
+    if (res.status === 204) return null;
+    return res.json();
+  } catch (err) {
+    if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+      localStorage.setItem('qingtian_offline', 'true');
+    }
+    throw err;
   }
-  if (res.status === 204) return null;
-  return res.json();
 }
 
 // ===================== 认证 =====================
