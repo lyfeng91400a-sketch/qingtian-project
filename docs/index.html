@@ -343,8 +343,7 @@ a { color: var(--primary); text-decoration: none; }
 @media (max-width: 1024px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } .dashboard-grid { grid-template-columns: 1fr; } .projects-grid { grid-template-columns: repeat(2, 1fr); } .summary-grid { grid-template-columns: repeat(2, 1fr); } .member-stats { flex-wrap: wrap; gap: 8px; } .resource-header { flex-wrap: wrap; } .resource-load-wrap { max-width: 100%; width: 100%; margin-top: 8px; } }
 @media (max-width: 768px) { .sidebar { display: none; } .main { margin-left: 0; padding: 16px; } .stats-grid { grid-template-columns: 1fr; } .projects-grid { grid-template-columns: 1fr; } .kanban-board { grid-template-columns: 1fr; } .modal { width: 90vw; } .form-row { flex-direction: column; } .member-header { flex-wrap: wrap; } .load-bar-wrap { width: 80px; } }
 </style>
-<script src="config.js"></script>
-<script src="api.js"></script>
+<!-- 单页应用（SPA），所有代码内联，无外部依赖 -->
 </head>
 <body>
 
